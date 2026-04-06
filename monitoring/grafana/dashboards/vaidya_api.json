@@ -1,0 +1,75 @@
+{
+  "title": "Vaidya API Dashboard",
+  "uid": "vaidya-api-main",
+  "version": 1,
+  "schemaVersion": 38,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(http_requests_total{job=\"vaidya-api\"}[1m])",
+          "legendFormat": "{{method}} {{path}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error Rate (%)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(http_requests_total{job=\"vaidya-api\",status=~\"5..\"}[1m]) / rate(http_requests_total{job=\"vaidya-api\"}[1m]) * 100",
+          "legendFormat": "5xx error rate %"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "P95 Latency (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job=\"vaidya-api\"}[5m])) * 1000",
+          "legendFormat": "p95 latency ms"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Active Triage Sessions",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 8, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "vaidya_active_triage_sessions_total",
+          "legendFormat": "Active sessions"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "LLM Fallback Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 18, "y": 8, "w": 6, "h": 8 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "rate(vaidya_llm_fallback_total[5m])",
+          "legendFormat": "LLM fallbacks/s"
+        }
+      ]
+    }
+  ]
+}

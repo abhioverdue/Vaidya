@@ -1,0 +1,68 @@
+# Few-shot examples for symptom extraction
+# These are prepended to the user message to prime Llama 3.1 8B
+# Format: INPUT → EXPECTED OUTPUT (used in prompt construction)
+
+EXAMPLE_1:
+INPUT: "I have been having fever and cough for 3 days. My chest hurts when I breathe."
+OUTPUT: {
+  "symptoms": ["high_fever", "cough", "chest_pain"],
+  "duration": "3 days",
+  "severity_estimate": null,
+  "body_parts": ["chest"],
+  "red_flags": ["chest pain on breathing"],
+  "raw_keywords": ["fever", "cough", "3 days", "chest hurts", "breathe"],
+  "onset_type": "gradual",
+  "context_notes": null
+}
+
+EXAMPLE_2:
+INPUT: "मुझे 5 दिनों से बुखार है। उल्टी भी हो रही है और पेट में बहुत दर्द है। आंखें पीली पड़ गई हैं।"
+OUTPUT: {
+  "symptoms": ["high_fever", "vomiting", "stomach_pain", "yellowing_of_eyes"],
+  "duration": "5 days",
+  "severity_estimate": null,
+  "body_parts": ["stomach", "eyes"],
+  "red_flags": ["yellowing of eyes — possible jaundice"],
+  "raw_keywords": ["bukhar", "ulti", "pet mein dard", "aankhein peeli"],
+  "onset_type": "gradual",
+  "context_notes": "Patient described symptoms in Hindi"
+}
+
+EXAMPLE_3:
+INPUT: "எனக்கு திடீரென்று தலைவலி வந்தது, வாந்தி வருகிறது, கண் பார்வை மங்கலாக உள்ளது"
+OUTPUT: {
+  "symptoms": ["headache", "vomiting", "blurred_and_distorted_vision"],
+  "duration": null,
+  "severity_estimate": null,
+  "body_parts": ["head", "eyes"],
+  "red_flags": ["sudden onset headache", "blurred vision — possible neurological issue"],
+  "raw_keywords": ["thalai vali", "vanthi", "kan parvai mangal"],
+  "onset_type": "sudden",
+  "context_notes": "Patient described symptoms in Tamil. Sudden severe headache warrants urgent evaluation."
+}
+
+EXAMPLE_4:
+INPUT: "Severe chest pain, sweating a lot, left arm is numb, feel like I'm going to faint. Started 20 minutes ago."
+OUTPUT: {
+  "symptoms": ["chest_pain", "sweating", "weakness_in_limbs", "dizziness"],
+  "duration": "20 minutes",
+  "severity_estimate": 9,
+  "body_parts": ["chest", "left arm"],
+  "red_flags": ["severe chest pain + sweating + arm numbness — possible cardiac event", "near-syncope"],
+  "raw_keywords": ["chest pain", "sweating", "left arm numb", "faint", "20 minutes"],
+  "onset_type": "sudden",
+  "context_notes": "Classic MI presentation. Immediate emergency referral indicated."
+}
+
+EXAMPLE_5:
+INPUT: "loose motions since yesterday, stomach cramping, no fever, feeling very weak"
+OUTPUT: {
+  "symptoms": ["diarrhoea", "cramps", "fatigue"],
+  "duration": "since yesterday",
+  "severity_estimate": null,
+  "body_parts": ["stomach"],
+  "red_flags": [],
+  "raw_keywords": ["loose motions", "stomach cramping", "no fever", "weak"],
+  "onset_type": "sudden",
+  "context_notes": "Patient explicitly denied fever"
+}

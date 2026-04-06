@@ -1,0 +1,1 @@
+Replace all occurrences of "ollama" with "gemini" in extractor.py for the LLM call section

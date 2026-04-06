@@ -1,0 +1,43 @@
+version: "3.9"
+
+# Production overrides — use with:
+# docker-compose -f docker-compose.yml -f docker-compose.prod.yml up
+
+services:
+  api:
+    build:
+      target: production
+    command: >
+      gunicorn app.main:app
+      -k uvicorn.workers.UvicornWorker
+      -w 2
+      --bind 0.0.0.0:8000
+      --timeout 120
+      --access-logfile -
+    environment:
+      ENV: production
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://vaidya.health}
+    restart: always
+
+  celery_worker:
+    build:
+      target: production
+    command: celery -A app.worker.celery_app worker --loglevel=warning --concurrency=4
+    restart: always
+
+  celery_beat:
+    build:
+      target: production
+    restart: always
+
+  postgres:
+    restart: always
+
+  redis:
+    restart: always
+
+  nginx:
+    volumes:
+      - ./nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+    environment:
+      - GRAFANA_SERVER_IP=${GRAFANA_SERVER_IP:-172.28.0.4}

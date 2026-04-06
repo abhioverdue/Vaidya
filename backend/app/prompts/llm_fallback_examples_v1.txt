@@ -1,0 +1,109 @@
+# Few-shot examples for Vaidya LLM fallback diagnosis
+# These are injected as alternating user/assistant turns before the real patient query.
+# Covers: rare disease, emergency, vague symptoms, multilingual, paediatric, self-limiting
+
+EXAMPLE_1:
+INPUT: symptoms: [high_fever, joint_pain, skin_rash, red_spots_over_body] | duration: 4 days | severity: 7/10 | keywords: fever, rash, joint pain, red spots, platelets, dengue | language: English
+OUTPUT: {
+  "primary_diagnosis": "Dengue Fever",
+  "confidence": 0.82,
+  "icd_hint": "A90",
+  "differential": [
+    {"disease": "Chikungunya", "confidence": 0.55, "reasoning": "Shares fever, rash, and severe joint pain but joint involvement typically more pronounced"},
+    {"disease": "Malaria", "confidence": 0.30, "reasoning": "Endemic fever in rural India but rash and joint pain less typical"},
+    {"disease": "Typhoid", "confidence": 0.20, "reasoning": "Prolonged fever but rash pattern and joint pain differ"}
+  ],
+  "red_flags": ["Red spots over body may indicate thrombocytopenia — get platelet count urgently", "Fever beyond 5 days with rash warrants hospital evaluation"],
+  "description": "Dengue fever is a mosquito-borne viral infection causing high fever, severe joint and muscle pain, rash, and sometimes dangerous drops in platelet count. It is very common in rural India during monsoon season. Most patients recover with rest and fluids, but platelet monitoring is essential.",
+  "precautions": ["Rest completely and avoid physical exertion", "Drink ORS or coconut water — stay well hydrated", "Take paracetamol only for fever — avoid ibuprofen and aspirin (increase bleeding risk)", "Monitor for bleeding gums, blood in urine, or dark stools", "Get CBC with platelet count at nearest PHC today"],
+  "when_to_seek_emergency": "Go to hospital immediately if bleeding from any site, platelet count below 50,000, extreme weakness, vomiting blood, or inability to keep fluids down.",
+  "triage_level": 3,
+  "triage_reasoning": "Active dengue without danger signs — needs PHC visit today for platelet monitoring, not emergency unless bleeding signs appear.",
+  "confidence_reason": "Classic triad of fever, rash, and joint pain in endemic area with 4-day timeline is highly suggestive of dengue.",
+  "disclaimer": "This AI triage output is for guidance only. It is NOT a medical diagnosis or prescription. Always consult a licensed doctor before acting on this information."
+}
+
+EXAMPLE_2:
+INPUT: symptoms: [chest_pain, breathlessness, sweating, nausea] | duration: 30 minutes | severity: 9/10 | keywords: chest tightness, left arm pain, sweating, cannot breathe, fear | language: Hindi
+OUTPUT: {
+  "primary_diagnosis": "Acute Myocardial Infarction (Heart Attack)",
+  "confidence": 0.88,
+  "icd_hint": "I21",
+  "differential": [
+    {"disease": "Unstable Angina", "confidence": 0.65, "reasoning": "Similar presentation but typically shorter duration and less severe"},
+    {"disease": "Pulmonary Embolism", "confidence": 0.35, "reasoning": "Breathlessness and chest pain present but sweating and left arm pain favour MI"},
+    {"disease": "Severe GERD", "confidence": 0.10, "reasoning": "Can mimic chest pain but would not cause sweating and arm radiation"}
+  ],
+  "red_flags": ["Chest pain + breathlessness + sweating + left arm pain — classic MI triad", "30-minute duration without relief — cardiac emergency"],
+  "description": "These symptoms strongly suggest a heart attack (myocardial infarction), where blood supply to the heart muscle is suddenly blocked. This is a life-threatening medical emergency. Every minute of delay increases heart muscle damage. Call 108 immediately or go to the nearest hospital emergency room right now.",
+  "precautions": ["Call 108 (ambulance) immediately — do not drive yourself", "Chew one adult aspirin (325mg) if available and not allergic", "Rest in semi-sitting position — do not lie flat", "Loosen tight clothing around chest and neck", "Do not eat or drink anything until seen by a doctor"],
+  "when_to_seek_emergency": "This IS an emergency — go to hospital immediately. Do not wait.",
+  "triage_level": 5,
+  "triage_reasoning": "Classic STEMI presentation — 30 minutes of chest pain with radiation, sweating, and breathlessness is a medical emergency requiring immediate hospital intervention.",
+  "confidence_reason": "Combination of chest pain, left arm radiation, sweating, breathlessness, and fear with sudden onset gives very high clinical suspicion for MI.",
+  "disclaimer": "This AI triage output is for guidance only. It is NOT a medical diagnosis or prescription. Always consult a licensed doctor before acting on this information."
+}
+
+EXAMPLE_3:
+INPUT: symptoms: [continuous_sneezing, runny_nose, throat_irritation, mild_fever, congestion] | duration: 2 days | severity: 3/10 | keywords: cold, runny nose, sneezing, sore throat, no fever | language: Tamil
+OUTPUT: {
+  "primary_diagnosis": "Common Cold (Viral Upper Respiratory Tract Infection)",
+  "confidence": 0.91,
+  "icd_hint": "J00",
+  "differential": [
+    {"disease": "Allergic Rhinitis", "confidence": 0.45, "reasoning": "Sneezing and runny nose overlap but absence of itchy eyes and seasonal pattern needed"},
+    {"disease": "Influenza", "confidence": 0.25, "reasoning": "Also causes similar symptoms but typically higher fever and more systemic aches"},
+    {"disease": "Sinusitis", "confidence": 0.15, "reasoning": "Could develop from cold if congestion persists beyond 10 days with facial pain"}
+  ],
+  "red_flags": [],
+  "description": "This appears to be a common viral cold, which is self-limiting and typically resolves in 7–10 days. No serious concern is indicated at this severity level. Rest, fluids, and symptomatic relief are the main treatments.",
+  "precautions": ["Rest at home for 2–3 days to recover", "Drink warm water, ginger tea, or jeera water frequently", "Honey and lemon in warm water helps soothe throat", "Steam inhalation with tulsi leaves for congestion", "Paracetamol for mild fever or throat discomfort if needed", "Avoid cold drinks and fried food", "Wash hands frequently to avoid spreading"],
+  "when_to_seek_emergency": "Visit a doctor if fever rises above 103°F, breathing difficulty develops, symptoms worsen after 5 days, or ear pain appears.",
+  "triage_level": 1,
+  "triage_reasoning": "Self-limiting viral illness with low severity — no red flags, manageable at home with rest and symptomatic care.",
+  "confidence_reason": "Classic 5-symptom cold presentation at low severity with 2-day duration — very high diagnostic confidence.",
+  "disclaimer": "This AI triage output is for guidance only. It is NOT a medical diagnosis or prescription. Always consult a licensed doctor before acting on this information."
+}
+
+EXAMPLE_4:
+INPUT: symptoms: [fatigue, weight_loss, night_sweats, cough, blood_in_sputum] | duration: 6 weeks | severity: 6/10 | keywords: weight loss, coughing since 6 weeks, blood in sputum, night sweats, TB contact history | language: English
+OUTPUT: {
+  "primary_diagnosis": "Pulmonary Tuberculosis",
+  "confidence": 0.85,
+  "icd_hint": "A15.0",
+  "differential": [
+    {"disease": "Lung Cancer", "confidence": 0.35, "reasoning": "Haemoptysis and weight loss overlap but TB is far more common in rural India and contact history supports it"},
+    {"disease": "Bronchiectasis", "confidence": 0.25, "reasoning": "Can cause chronic cough with blood-tinged sputum but weight loss and night sweats less typical"},
+    {"disease": "Pneumonia", "confidence": 0.20, "reasoning": "Cough and sputum match but typically shorter duration without this weight loss pattern"}
+  ],
+  "red_flags": ["Blood in sputum (haemoptysis) requires same-day evaluation", "6 weeks of cough with weight loss — TB screening mandatory", "Infectious risk — household contacts must be screened"],
+  "description": "The combination of 6 weeks of cough, blood in sputum, unexplained weight loss, fatigue, and night sweats is the classic presentation of pulmonary tuberculosis, which remains very common in rural India. TB is completely curable with a full 6-month DOTS course, which is provided free at all government PHCs.",
+  "precautions": ["Go to the nearest PHC today — sputum test (AFB smear) is free under RNTCP", "Cover mouth when coughing — use a cloth or mask", "Ensure good ventilation in the home — open windows", "Do not share utensils or towels with household members until diagnosis confirmed", "All household contacts (especially children) must be screened", "Do not start any medication until diagnosed"],
+  "when_to_seek_emergency": "Go to hospital immediately if coughing blood heavily, severe breathing difficulty, or very high fever.",
+  "triage_level": 4,
+  "triage_reasoning": "6-week productive cough with haemoptysis, weight loss, and night sweats strongly suggests active TB — requires urgent sputum testing within 24 hours and isolation precautions.",
+  "confidence_reason": "Classic TB symptom quartet with contact history in endemic rural India gives high confidence — sputum microscopy required to confirm.",
+  "disclaimer": "This AI triage output is for guidance only. It is NOT a medical diagnosis or prescription. Always consult a licensed doctor before acting on this information."
+}
+
+EXAMPLE_5:
+INPUT: symptoms: [headache, dizziness, nausea, vomiting] | duration: 1 day | severity: 5/10 | keywords: headache, giddiness, vomiting twice, no fever, had oily food last night | language: Hindi
+OUTPUT: {
+  "primary_diagnosis": "Acute Gastritis / Migraine with Nausea",
+  "confidence": 0.52,
+  "icd_hint": null,
+  "differential": [
+    {"disease": "Migraine", "confidence": 0.50, "reasoning": "Headache with nausea and vomiting without fever is a classic migraine pattern"},
+    {"disease": "Acute Gastritis", "confidence": 0.45, "reasoning": "Recent oily food, nausea, vomiting, and headache (from dehydration) fits gastritis"},
+    {"disease": "Viral Gastroenteritis", "confidence": 0.30, "reasoning": "Overlapping presentation but diarrhoea not mentioned"},
+    {"disease": "Heat Exhaustion", "confidence": 0.20, "reasoning": "Dizziness, nausea, headache pattern possible in rural India summer conditions"}
+  ],
+  "red_flags": [],
+  "description": "The symptoms suggest either a migraine headache or stomach irritation from food, both of which are common and self-limiting. The absence of fever makes a serious infection less likely. Two conditions are possible here — the exact cause will become clearer over the next few hours.",
+  "precautions": ["Rest in a quiet, dark room if headache is the main symptom", "Sip ORS or plain water slowly — avoid solid food for 2–4 hours", "If vomiting continues, try small sips of electrolyte water every 10 minutes", "Avoid oily, spicy, and heavy foods for 24 hours", "Paracetamol 500mg for headache — take only if temperature is also present"],
+  "when_to_seek_emergency": "Seek immediate care if headache suddenly becomes the worst you have ever had, neck stiffness develops, vision changes, vomiting is more than 5 times, or unable to keep any fluids down.",
+  "triage_level": 2,
+  "triage_reasoning": "Mild-moderate presentation without fever or red flags — monitor at home and reassess in 24h, see doctor if not improving.",
+  "confidence_reason": "Overlapping presentations of migraine and gastritis reduce confidence — clinical examination needed to differentiate; hence confidence capped at 0.52.",
+  "disclaimer": "This AI triage output is for guidance only. It is NOT a medical diagnosis or prescription. Always consult a licensed doctor before acting on this information."
+}
