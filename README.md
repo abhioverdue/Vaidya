@@ -141,3 +141,4 @@ The APK/web app works fully without internet:
 | Languages | English, Hindi, Tamil |
 | Observability | Prometheus + Grafana |
 # Vaidya
+# Vaidya
