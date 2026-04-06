@@ -140,3 +140,4 @@ The APK/web app works fully without internet:
 | Backend API | FastAPI + Celery + PostgreSQL (TimescaleDB) + Redis |
 | Languages | English, Hindi, Tamil |
 | Observability | Prometheus + Grafana |
+# Vaidya
