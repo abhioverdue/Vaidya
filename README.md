@@ -142,3 +142,4 @@ The APK/web app works fully without internet:
 | Observability | Prometheus + Grafana |
 # Vaidya
 # Vaidya
+# Vaidya
