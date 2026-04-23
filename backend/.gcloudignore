@@ -1,0 +1,13 @@
+.gcloudignore
+.git
+venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.env
+*.db
+*.sqlite
+tests/
+.pytest_cache/
+uvicorn_out.txt

@@ -1,0 +1,174 @@
+{
+  "common": {
+    "app_name": "वैद्य",
+    "tagline": "आपका AI स्वास्थ्य सहायक",
+    "loading": "लोड हो रहा है...",
+    "error": "कुछ गलत हुआ",
+    "retry": "फिर कोशिश करें",
+    "close": "बंद करें",
+    "next": "आगे",
+    "back": "वापस",
+    "done": "हो गया",
+    "cancel": "रद्द करें",
+    "confirm": "पुष्टि करें",
+    "save": "सहेजें",
+    "yes": "हाँ",
+    "no": "नहीं",
+    "or": "या",
+    "disclaimer": "यह AI ट्राइएज टूल है। हमेशा किसी लाइसेंस प्राप्त डॉक्टर से सलाह लें।",
+    "offline_mode": "ऑफलाइन मोड",
+    "offline_notice": "आप ऑफलाइन हैं। डिवाइस AI का उपयोग हो रहा है।",
+    "call_emergency": "108 पर कॉल करें"
+  },
+
+  "language": {
+    "select_title": "अपनी भाषा चुनें",
+    "select_subtitle": "आप इसे सेटिंग्स में कभी भी बदल सकते हैं",
+    "english": "English",
+    "hindi": "हिन्दी (Hindi)",
+    "tamil": "தமிழ் (Tamil)"
+  },
+
+  "home": {
+    "greeting_morning": "सुप्रभात",
+    "greeting_afternoon": "नमस्ते",
+    "greeting_evening": "शुभ संध्या",
+    "start_triage": "अपने लक्षण जाँचें",
+    "recent_sessions": "हाल की जाँचें",
+    "no_sessions": "अभी तक कोई जाँच नहीं — ऊपर टैप करें",
+    "emergency_banner": "आपातकाल? अभी 108 पर कॉल करें",
+    "asha_contact": "मेरी ASHA कार्यकर्ता",
+    "find_hospital": "नजदीकी अस्पताल खोजें"
+  },
+
+  "symptom": {
+    "screen_title": "अपने लक्षण बताएं",
+    "input_placeholder": "लिखें कि आप कैसा महसूस कर रहे हैं — बुखार, खांसी, सिरदर्द...",
+    "voice_hint": "या माइक टैप करें और बोलें",
+    "quick_select": "जल्दी चुनें",
+    "severity_label": "आप कितना बीमार महसूस कर रहे हैं?",
+    "severity_mild": "हल्का",
+    "severity_moderate": "मध्यम",
+    "severity_severe": "गंभीर",
+    "duration_label": "यह लक्षण कब से हैं?",
+    "duration_today": "आज से",
+    "duration_2_days": "2-3 दिन से",
+    "duration_1_week": "एक हफ्ते से",
+    "duration_more": "एक हफ्ते से ज्यादा",
+    "analyze_btn": "लक्षण जाँचें",
+    "voice_listening": "सुन रहा हूँ... अभी बोलें",
+    "voice_processing": "प्रोसेस हो रहा है...",
+    "voice_tap_to_stop": "रोकने के लिए टैप करें",
+    "min_symptoms_warning": "कृपया कम से कम एक लक्षण बताएं",
+    "add_image": "फोटो जोड़ें (घाव / चकत्ते / X-ray)",
+    "image_added": "फोटो जोड़ी गई",
+    "image_optional": "वैकल्पिक — त्वचा या घाव की जाँच में मदद करता है"
+  },
+
+  "analysis": {
+    "screen_title": "आपके लक्षणों का विश्लेषण",
+    "step_extract": "आपके लक्षण समझ रहे हैं...",
+    "step_classify": "स्वास्थ्य पैटर्न से मिला रहे हैं...",
+    "step_fuse": "सभी संकेत मिला रहे हैं...",
+    "step_triage": "देखभाल का स्तर निर्धारित हो रहा है...",
+    "step_done": "हो गया",
+    "offline_note": "डिवाइस AI चल रहा है (ऑफलाइन मोड)"
+  },
+
+  "consent": {
+    "label": "सहमति आवश्यक",
+    "title": "जारी रखने से\nपहले",
+    "point1_heading": "AI गलती कर सकता है",
+    "point1_body": "यह टूल आपके लक्षणों के आधार पर संभावित स्थितियाँ सुझाने के लिए AI का उपयोग करता है। यह गलत हो सकता है।",
+    "point2_heading": "हमेशा योग्य डॉक्टर से सलाह लें",
+    "point2_body": "यहाँ बताई गई कोई भी स्थिति पर कार्रवाई करने से पहले किसी लाइसेंस प्राप्त स्वास्थ्य देखभाल पेशेवर से इसकी पुष्टि करनी चाहिए।",
+    "point3_heading": "आपातकाल में 108 कॉल करें",
+    "point3_body": "चिकित्सा आपातकाल में इस ऐप पर निर्भर न रहें। तुरंत 108 (एम्बुलेंस) कॉल करें।",
+    "note": "जारी रखकर आप स्वीकार करते हैं कि यह केवल AI-सहायक जानकारी है और चिकित्सा सलाह नहीं है।",
+    "accept": "मैं समझता हूँ, जारी रखें",
+    "exit": "ऐप बंद करें"
+  },
+
+  "result": {
+    "screen_title": "आपकी स्वास्थ्य जाँच",
+    "diagnosis_label": "सबसे संभावित स्थिति",
+    "confidence_label": "विश्वसनीयता",
+    "confidence_high": "अधिक",
+    "confidence_medium": "मध्यम",
+    "confidence_low": "कम",
+    "differential_label": "अन्य संभावनाएं",
+    "red_flags_label": "चेतावनी के संकेत",
+    "precautions_label": "अभी क्या करें",
+    "description_label": "इस स्थिति के बारे में",
+    "triage_label": "देखभाल का स्तर",
+    "triage_1": "घर पर आत्म-देखभाल",
+    "triage_2": "घर पर निगरानी — आराम करें",
+    "triage_3": "48 घंटे में PHC जाएं",
+    "triage_4": "24 घंटे में देखभाल लें",
+    "triage_5": "आपातकाल — अभी अस्पताल जाएं",
+    "find_care": "नजदीकी देखभाल खोजें",
+    "teleconsult": "ऑनलाइन डॉक्टर से बात करें",
+    "share_result": "ASHA कार्यकर्ता को भेजें",
+    "new_check": "फिर से जाँचें",
+    "asha_notified": "आपकी ASHA कार्यकर्ता को सूचित किया गया",
+    "disclaimer_title": "महत्वपूर्ण",
+    "source_xgboost": "AI विश्लेषण",
+    "source_fusion": "AI + ऑडियो/छवि विश्लेषण",
+    "source_llm_fallback": "AI गहरा विश्लेषण",
+    "low_confidence_banner": "कम विश्वसनीयता — AI अनिश्चित था। कृपया डॉक्टर से सलाह लें।",
+    "high_confidence_chip": "उच्च विश्वसनीयता"
+  },
+
+  "care": {
+    "screen_title": "नजदीकी देखभाल",
+    "hospitals_tab": "अस्पताल",
+    "teleconsult_tab": "वीडियो परामर्श",
+    "loading_hospitals": "नजदीकी अस्पताल ढूंढ रहे हैं...",
+    "no_hospitals": "नजदीक कोई अस्पताल नहीं मिला",
+    "km_away": "{{distance}} किमी दूर",
+    "open_24h": "24 घंटे खुला",
+    "ambulance": "108 एम्बुलेंस उपलब्ध",
+    "pmjay": "PMJAY में शामिल",
+    "get_directions": "रास्ता देखें",
+    "call_hospital": "कॉल करें",
+    "teleconsult_free": "मुफ्त सरकारी वीडियो परामर्श",
+    "available_now": "अभी उपलब्ध",
+    "book_slot": "समय बुक करें",
+    "esanjeevani": "eSanjeevani OPD"
+  },
+
+  "voice": {
+    "permission_title": "माइक्रोफ़ोन अनुमति",
+    "permission_body": "वैद्य को आवाज से लक्षण दर्ज करने के लिए माइक्रोफ़ोन चाहिए।",
+    "permission_grant": "माइक्रोफ़ोन अनुमति दें",
+    "permission_deny": "टाइप करें",
+    "too_short": "रिकॉर्डिंग बहुत छोटी — कृपया कम से कम 2 सेकंड बोलें",
+    "too_quiet": "आवाज बहुत धीमी — कृपया स्पष्ट बोलें",
+    "upload_failed": "आवाज प्रोसेस नहीं हो सकी। कृपया लिखें।",
+    "transcript_label": "हमने सुना:",
+    "transcript_edit": "जरूरत हो तो बदलें"
+  },
+
+  "settings": {
+    "screen_title": "सेटिंग्स",
+    "language": "भाषा",
+    "large_text": "बड़ा टेक्स्ट",
+    "high_contrast": "उच्च कंट्रास्ट",
+    "audio_readout": "परिणाम जोर से पढ़ें",
+    "about": "वैद्य के बारे में",
+    "privacy": "गोपनीयता नीति",
+    "version": "संस्करण",
+    "clear_history": "इतिहास मिटाएं",
+    "clear_confirm": "इससे सभी पुरानी स्वास्थ्य जाँचें हट जाएंगी। जारी रखें?",
+    "cleared": "इतिहास मिटा दिया गया"
+  },
+
+  "errors": {
+    "network": "इंटरनेट नहीं — ऑफलाइन मोड उपयोग हो रहा है",
+    "server": "सर्वर त्रुटि — कृपया फिर कोशिश करें",
+    "location": "आपका स्थान नहीं मिल सका",
+    "camera": "कैमरा उपलब्ध नहीं",
+    "microphone": "माइक्रोफ़ोन उपलब्ध नहीं",
+    "model_load": "डिवाइस AI तैयार नहीं — कृपया इंटरनेट से जुड़ें"
+  }
+}

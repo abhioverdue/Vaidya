@@ -1,0 +1,22 @@
+steps:
+  # Step 1: Download models from GCS into the build workspace
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args: ['gsutil', '-m', 'cp', '-r', 'gs://vaidya-f9367-models/models', '.']
+
+  # Step 2: Build Docker image (models now present in workspace)
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - --no-cache
+      - --target
+      - production
+      - -t
+      - asia-south1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/vaidya-backend:latest
+      - .
+
+images:
+  - asia-south1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/vaidya-backend:latest
+
+options:
+  machineType: E2_HIGHCPU_8
+  diskSizeGb: 100

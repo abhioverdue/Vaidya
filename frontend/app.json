@@ -1,0 +1,108 @@
+{
+  "expo": {
+    "name": "Vaidya",
+    "slug": "vaidya",
+    "version": "1.0.0",
+    "scheme": "vaidya",
+    "orientation": "portrait",
+    "icon": "./src/assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./src/assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F6E56"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vaidya.health",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Vaidya uses the microphone to record your symptoms by voice",
+        "NSCameraUsageDescription": "Vaidya uses the camera to capture medical images for analysis",
+        "NSLocationWhenInUseUsageDescription": "Vaidya uses your location to find nearby hospitals and PHCs",
+        "NSSpeechRecognitionUsageDescription": "Vaidya uses speech recognition to transcribe your voice input",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./src/assets/adaptive-icon.png",
+        "backgroundColor": "#0F6E56"
+      },
+      "package": "com.vaidya.health",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCDzqroisSBOKa86sJUIRoB-4Mjlwk0_l0"
+        }
+      },
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "VIBRATE",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS",
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "versionCode": 1
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./src/assets/favicon.png",
+      "name": "Vaidya",
+      "shortName": "Vaidya",
+      "description": "AI-powered rural health triage",
+      "themeColor": "#0F6E56",
+      "backgroundColor": "#F7F4EE"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-av",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true,
+            "minSdkVersion": 24
+          }
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Vaidya uses the camera to capture medical images for analysis"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Vaidya uses your location to find nearby hospitals"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiBaseUrl": "http://localhost:8000",
+      "eas": {
+        "projectId": "82b3e908-7700-486d-9619-5d1c626c16c1"
+      },
+      "router": {
+        "origin": false
+      }
+    },
+    "jsEngine": "hermes",
+    "owner": "ak0215s-organization"
+  }
+}

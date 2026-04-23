@@ -1,0 +1,174 @@
+{
+  "common": {
+    "app_name": "Vaidya",
+    "tagline": "Your AI health guide",
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "retry": "Try again",
+    "close": "Close",
+    "next": "Next",
+    "back": "Back",
+    "done": "Done",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "yes": "Yes",
+    "no": "No",
+    "or": "or",
+    "disclaimer": "This is an AI triage tool. Always consult a licensed doctor.",
+    "offline_mode": "Offline mode",
+    "offline_notice": "You are offline. Using on-device AI for results.",
+    "call_emergency": "Call 108"
+  },
+
+  "language": {
+    "select_title": "Choose your language",
+    "select_subtitle": "You can change this any time in settings",
+    "english": "English",
+    "hindi": "हिन्दी (Hindi)",
+    "tamil": "தமிழ் (Tamil)"
+  },
+
+  "home": {
+    "greeting_morning": "Good morning",
+    "greeting_afternoon": "Good afternoon",
+    "greeting_evening": "Good evening",
+    "start_triage": "Check my symptoms",
+    "recent_sessions": "Recent checks",
+    "no_sessions": "No checks yet — tap above to start",
+    "emergency_banner": "Emergency? Call 108 now",
+    "asha_contact": "My ASHA worker",
+    "find_hospital": "Find nearest hospital"
+  },
+
+  "symptom": {
+    "screen_title": "Describe your symptoms",
+    "input_placeholder": "Type how you are feeling — fever, cough, headache...",
+    "voice_hint": "Or tap the mic and speak",
+    "quick_select": "Quick select",
+    "severity_label": "How severe are you feeling?",
+    "severity_mild": "Mild",
+    "severity_moderate": "Moderate",
+    "severity_severe": "Severe",
+    "duration_label": "How long have you had these symptoms?",
+    "duration_today": "Since today",
+    "duration_2_days": "2–3 days",
+    "duration_1_week": "About a week",
+    "duration_more": "More than a week",
+    "analyze_btn": "Check my symptoms",
+    "voice_listening": "Listening... speak now",
+    "voice_processing": "Processing...",
+    "voice_tap_to_stop": "Tap to stop",
+    "min_symptoms_warning": "Please describe at least one symptom",
+    "add_image": "Add photo (wound / rash / X-ray)",
+    "image_added": "Image added",
+    "image_optional": "Optional — helps with skin or wound analysis"
+  },
+
+  "analysis": {
+    "screen_title": "Analysing your symptoms",
+    "step_extract": "Understanding your symptoms...",
+    "step_classify": "Checking against health patterns...",
+    "step_fuse": "Combining all signals...",
+    "step_triage": "Determining your care level...",
+    "step_done": "Done",
+    "offline_note": "Running on-device AI (offline mode)"
+  },
+
+  "consent": {
+    "label": "CONSENT REQUIRED",
+    "title": "Before you\ncontinue",
+    "point1_heading": "AI may make mistakes",
+    "point1_body": "This tool uses AI to suggest possible conditions based on your symptoms. It can be wrong. Do not act on results without consulting a doctor.",
+    "point2_heading": "Always consult a qualified doctor",
+    "point2_body": "Any condition flagged here must be confirmed by a licensed healthcare professional before you act on it.",
+    "point3_heading": "In an emergency, call 108",
+    "point3_body": "Do not rely on this app in a medical emergency. Call 108 (ambulance) immediately.",
+    "note": "By continuing you acknowledge this is AI-assisted information only and does not constitute medical advice.",
+    "accept": "I understand, continue",
+    "exit": "Exit app"
+  },
+
+  "result": {
+    "screen_title": "Your health check",
+    "diagnosis_label": "Most likely condition",
+    "confidence_label": "Confidence",
+    "confidence_high": "High",
+    "confidence_medium": "Medium",
+    "confidence_low": "Low",
+    "differential_label": "Other possibilities",
+    "red_flags_label": "Warning signs detected",
+    "precautions_label": "What to do now",
+    "description_label": "About this condition",
+    "triage_label": "Care level",
+    "triage_1": "Self-care at home",
+    "triage_2": "Monitor — rest at home",
+    "triage_3": "Visit PHC within 48 hours",
+    "triage_4": "Seek care within 24 hours",
+    "triage_5": "EMERGENCY — go to hospital NOW",
+    "find_care": "Find nearest care",
+    "teleconsult": "Talk to a doctor online",
+    "share_result": "Share with ASHA worker",
+    "new_check": "Check again",
+    "asha_notified": "Your ASHA worker has been notified",
+    "disclaimer_title": "Important",
+    "source_xgboost": "AI analysis",
+    "source_fusion": "AI + audio/image analysis",
+    "source_llm_fallback": "AI deep analysis",
+    "low_confidence_banner": "Low confidence result — AI was uncertain. Please consult a doctor.",
+    "high_confidence_chip": "High confidence"
+  },
+
+  "care": {
+    "screen_title": "Nearby care",
+    "hospitals_tab": "Hospitals",
+    "teleconsult_tab": "Video consult",
+    "loading_hospitals": "Finding nearby hospitals...",
+    "no_hospitals": "No hospitals found nearby",
+    "km_away": "{{distance}} km away",
+    "open_24h": "Open 24 hours",
+    "ambulance": "108 ambulance available",
+    "pmjay": "PMJAY covered",
+    "get_directions": "Get directions",
+    "call_hospital": "Call",
+    "teleconsult_free": "Free government video consult",
+    "available_now": "Available now",
+    "book_slot": "Book slot",
+    "esanjeevani": "eSanjeevani OPD"
+  },
+
+  "voice": {
+    "permission_title": "Microphone access",
+    "permission_body": "Vaidya needs the microphone to record your symptoms by voice.",
+    "permission_grant": "Allow microphone",
+    "permission_deny": "Type instead",
+    "too_short": "Recording too short — please speak for at least 2 seconds",
+    "too_quiet": "Audio too quiet — please speak clearly",
+    "upload_failed": "Could not process voice. Please type your symptoms.",
+    "transcript_label": "We heard:",
+    "transcript_edit": "Edit if needed"
+  },
+
+  "settings": {
+    "screen_title": "Settings",
+    "language": "Language",
+    "large_text": "Large text",
+    "high_contrast": "High contrast",
+    "audio_readout": "Read results aloud",
+    "about": "About Vaidya",
+    "privacy": "Privacy policy",
+    "version": "Version",
+    "clear_history": "Clear session history",
+    "clear_confirm": "This will delete all your past health checks. Continue?",
+    "cleared": "History cleared"
+  },
+
+  "errors": {
+    "network": "No internet connection — using offline mode",
+    "server": "Server error — please try again",
+    "location": "Could not get your location",
+    "camera": "Camera not available",
+    "microphone": "Microphone not available",
+    "model_load": "On-device AI not ready — please connect to the internet"
+  }
+}
