@@ -94,6 +94,9 @@ class DiagnosisResult(BaseModel):
     triage_reasoning: Optional[str] = None
     when_to_seek_emergency: Optional[str] = None
     confidence_reason: Optional[str] = None
+    # Gemini-generated plain-language explanation: what the disease is, how to
+    # prevent it, and specific precautions — populated for every online diagnosis.
+    gemini_explanation: Optional[str] = None
     disclaimer: str = (
         "This is an AI-assisted triage tool. It is NOT a prescription or a substitute "
         "for a qualified doctor. Please consult a licensed medical professional."

@@ -27,7 +27,7 @@
         "gradleCommand": ":app:assembleRelease"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://18.60.95.88:8000"
+        "EXPO_PUBLIC_API_URL": "http://16.112.178.53:8000"
       }
     },
     "production": {
@@ -37,7 +37,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://18.60.95.88:8000"
+        "EXPO_PUBLIC_API_URL": "http://16.112.178.53:8000"
       }
     }
   },

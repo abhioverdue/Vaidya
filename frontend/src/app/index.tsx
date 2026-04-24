@@ -302,11 +302,15 @@ export default function HomeScreen() {
   const isReady         = useAppStore((s) => s.isReady);
 
   useEffect(() => {
-    if (!isReady) return; // wait for loadAuth() to resolve before redirecting
-    AsyncStorage.getItem(STORAGE_KEYS.CONSENT_GIVEN).then((val) => {
-      if (!val) { router.replace('/consent'); return; }
+    if (!isReady) return;
+    async function checkOnboarding() {
+      const lang = await AsyncStorage.getItem(STORAGE_KEYS.LANGUAGE);
+      if (!lang) { router.replace('/language-select'); return; }
+      const consent = await AsyncStorage.getItem(STORAGE_KEYS.CONSENT_GIVEN);
+      if (!consent) { router.replace('/consent'); return; }
       if (!isAuthenticated) { router.replace('/login' as any); }
-    });
+    }
+    checkOnboarding();
   }, [isAuthenticated, isReady]);
 
   return (

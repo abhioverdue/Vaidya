@@ -7,12 +7,14 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '@/store';
 import { COLORS, TYPE, RADIUS } from '@/constants';
 import { GradientCard } from '@/components/ui/GradientCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 
 export default function ImageResultScreen() {
+  const { t } = useTranslation();
   const store = useAppStore();
   const session = store.currentSession;
 
@@ -20,9 +22,9 @@ export default function ImageResultScreen() {
     return (
       <SafeAreaView style={s.safe}>
         <View style={s.center}>
-          <Text style={s.errorText}>No image analysis available</Text>
+          <Text style={s.errorText}>{t('image_result.no_image')}</Text>
           <TouchableOpacity onPress={() => router.back()} style={s.errorBackBtn}>
-            <Text style={s.backBtnText}>Go Back</Text>
+            <Text style={s.backBtnText}>{t('common.back')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -41,16 +43,16 @@ export default function ImageResultScreen() {
               <Text style={s.backGlyph}>←</Text>
             </View>
           </TouchableOpacity>
-          <Text style={s.headerTitle}>Image Analysis</Text>
+          <Text style={s.headerTitle}>{t('image_result.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
         {/* Top Prediction */}
         <Animated.View entering={FadeInDown.duration(350)}>
           <GradientCard>
-            <SectionHeader title="Primary Finding" />
+            <SectionHeader title={t('image_result.primary_finding')} />
             <Text style={s.primaryFinding}>{vision.top_prediction || 'Analysis complete'}</Text>
-            <Text style={s.datasetType}>Dataset: {vision.dataset_type || 'Medical imaging'}</Text>
+            <Text style={s.datasetType}>{t('image_result.dataset', { value: vision.dataset_type || 'Medical imaging' })}</Text>
           </GradientCard>
         </Animated.View>
 
@@ -58,7 +60,7 @@ export default function ImageResultScreen() {
         {vision.all_predictions && vision.all_predictions.length > 0 && (
           <Animated.View entering={FadeInDown.duration(350).delay(100)}>
             <GradientCard>
-              <SectionHeader title="All Predictions" />
+              <SectionHeader title={t('image_result.all_predictions')} />
               {vision.all_predictions.map((pred: any, i: number) => (
                 <View key={i} style={s.predRow}>
                   <Text style={s.predLabel}>{pred.label}</Text>
@@ -72,7 +74,7 @@ export default function ImageResultScreen() {
         {/* Signal Source */}
         <Animated.View entering={FadeInDown.duration(350).delay(200)}>
           <GradientCard>
-            <SectionHeader title="Analysis Method" />
+            <SectionHeader title={t('image_result.method_title')} />
             <Text style={s.signalSource}>{vision.signal_source || 'Vision model'}</Text>
           </GradientCard>
         </Animated.View>

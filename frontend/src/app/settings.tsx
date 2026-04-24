@@ -325,7 +325,7 @@ export default function SettingsScreen() {
               sub="Free teleconsult with govt doctors"
               onPress={() => {
                 Haptics.selectionAsync();
-                Linking.openURL('https://esanjeevaniopd.in');
+                Linking.openURL('https://esanjeevani.mohfw.gov.in/#/');
               }}
               isLast={false}
             />

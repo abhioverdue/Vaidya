@@ -62,7 +62,11 @@
     "min_symptoms_warning": "कृपया कम से कम एक लक्षण बताएं",
     "add_image": "फोटो जोड़ें (घाव / चकत्ते / X-ray)",
     "image_added": "फोटो जोड़ी गई",
-    "image_optional": "वैकल्पिक — त्वचा या घाव की जाँच में मदद करता है"
+    "image_optional": "वैकल्पिक — त्वचा या घाव की जाँच में मदद करता है",
+    "photo_source_title": "फोटो जोड़ें",
+    "photo_source_message": "फोटो जोड़ने का तरीका चुनें",
+    "take_photo": "फोटो लें",
+    "choose_gallery": "गैलरी से चुनें"
   },
 
   "analysis": {
@@ -134,7 +138,8 @@
     "teleconsult_free": "मुफ्त सरकारी वीडियो परामर्श",
     "available_now": "अभी उपलब्ध",
     "book_slot": "समय बुक करें",
-    "esanjeevani": "eSanjeevani OPD"
+    "esanjeevani": "eSanjeevani OPD",
+    "allow_location": "स्थान की अनुमति दें"
   },
 
   "voice": {
@@ -161,6 +166,42 @@
     "clear_history": "इतिहास मिटाएं",
     "clear_confirm": "इससे सभी पुरानी स्वास्थ्य जाँचें हट जाएंगी। जारी रखें?",
     "cleared": "इतिहास मिटा दिया गया"
+  },
+
+  "audio_result": {
+    "title": "ऑडियो विश्लेषण",
+    "no_audio": "कोई ऑडियो विश्लेषण उपलब्ध नहीं",
+    "primary_finding": "मुख्य निष्कर्ष",
+    "confidence": "विश्वसनीयता: {{value}}",
+    "all_predictions": "सभी भविष्यवाणियाँ",
+    "method_title": "विश्लेषण विधि",
+    "method_text": "ऑडियो मॉडल · श्वसन ध्वनि विश्लेषण"
+  },
+
+  "image_result": {
+    "title": "छवि विश्लेषण",
+    "no_image": "कोई छवि विश्लेषण उपलब्ध नहीं",
+    "primary_finding": "मुख्य निष्कर्ष",
+    "dataset": "डेटासेट: {{value}}",
+    "all_predictions": "सभी भविष्यवाणियाँ",
+    "method_title": "विश्लेषण विधि"
+  },
+
+  "fusion_detail": {
+    "title": "निदान संयोजन",
+    "no_fusion": "संयोजन विवरण उपलब्ध नहीं",
+    "how_it_works": "यह कैसे काम करता है",
+    "explanation": "वैद्य सटीक निदान के लिए कई AI मॉडलों को जोड़ता है। प्रत्येक माध्यम (टेक्स्ट, ऑडियो, छवि) स्वतंत्र संकेत प्रदान करता है जिन्हें विश्वास-आधारित मतदान से मिलाया जाता है।",
+    "signal_weights": "सिग्नल भार",
+    "weight_text": "टेक्स्ट विश्लेषण (XGBoost)",
+    "weight_audio": "ऑडियो विश्लेषण",
+    "weight_image": "छवि विश्लेषण",
+    "modalities_title": "विश्लेषित माध्यम",
+    "modality_text": "टेक्स्ट लक्षण",
+    "modality_audio": "श्वसन ऑडियो",
+    "modality_image": "चिकित्सा छवि",
+    "final_diagnosis": "अंतिम निदान",
+    "source_prefix": "स्रोत: {{value}}"
   },
 
   "errors": {

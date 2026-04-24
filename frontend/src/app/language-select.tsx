@@ -113,12 +113,7 @@ export default function LanguageSelectScreen() {
 
   async function handleSelect(lang: Language) {
     await setLanguage(lang);
-    const cautionSeen = await AsyncStorage.getItem(STORAGE_KEYS.CAUTION_SEEN);
-    if (cautionSeen) {
-      router.replace('/');
-    } else {
-      router.replace('/caution');
-    }
+    router.replace('/consent');
   }
 
   return (

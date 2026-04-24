@@ -166,6 +166,15 @@ export default function SymptomScreen() {
   const chips = QUICK_SYMPTOMS[lang];
   const canSubmit = !!(store.symptomText.trim() || selectedChips.length > 0);
 
+  // Estimate how many distinct symptoms have been described
+  const symptomCount = (() => {
+    const textSegments = store.symptomText
+      .split(/[,;]|\band\b|\bor\b|\bwith\b|\./i)
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 3);
+    return new Set([...textSegments, ...selectedChips]).size;
+  })();
+
   // Submit button pulse when ready
   const submitGlow = useSharedValue(0);
   useEffect(() => {
@@ -245,14 +254,38 @@ export default function SymptomScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
-  async function pickImage() {
-    const { granted } = await ImagePicker.requestCameraPermissionsAsync();
-    if (!granted) return;
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.8, base64: false });
-    if (!result.canceled && result.assets[0]) {
-      store.setImageUri(result.assets[0].uri);
-      setShowImageTaskModal(true);
-    }
+  function pickImage() {
+    Alert.alert(
+      t('symptom.photo_source_title'),
+      t('symptom.photo_source_message'),
+      [
+        {
+          text: t('symptom.take_photo'),
+          onPress: async () => {
+            const { granted } = await ImagePicker.requestCameraPermissionsAsync();
+            if (!granted) return;
+            const result = await ImagePicker.launchCameraAsync({ quality: 0.8, base64: false });
+            if (!result.canceled && result.assets[0]) {
+              store.setImageUri(result.assets[0].uri);
+              setShowImageTaskModal(true);
+            }
+          },
+        },
+        {
+          text: t('symptom.choose_gallery'),
+          onPress: async () => {
+            const { granted } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (!granted) return;
+            const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.8, base64: false, mediaTypes: ImagePicker.MediaTypeOptions.Images });
+            if (!result.canceled && result.assets[0]) {
+              store.setImageUri(result.assets[0].uri);
+              setShowImageTaskModal(true);
+            }
+          },
+        },
+        { text: t('common.cancel'), style: 'cancel' },
+      ],
+    );
   }
 
   function handleSubmit() {
@@ -280,7 +313,7 @@ export default function SymptomScreen() {
           </View>
         </TouchableOpacity>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>Symptom Check</Text>
+          <Text style={s.headerTitle}>{t('symptom.screen_title')}</Text>
           <StatusIndicator online={store.isOnline} />
         </View>
         <View style={{ width: 40 }} />
@@ -298,7 +331,7 @@ export default function SymptomScreen() {
         <Animated.View entering={FadeInDown.duration(380)} style={s.voiceCard}>
           {/* Mode label */}
           <View style={s.voiceCardTop}>
-            <Text style={s.sectionLabel}>VOICE INPUT</Text>
+            <Text style={s.sectionLabel}>{t('voice.permission_title').toUpperCase()}</Text>
             {store.audioUri && (
               <PillBadge label="Audio ready" color={COLORS.sage} bg={COLORS.sageGhost} size="sm" />
             )}
@@ -349,7 +382,7 @@ export default function SymptomScreen() {
         {/* ── Text input ─────────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(380).delay(55)} style={s.textCard}>
           <View style={s.textCardTop}>
-            <Text style={s.sectionLabel}>DESCRIBE IN WORDS</Text>
+            <Text style={s.sectionLabel}>{t('symptom.screen_title').toUpperCase()}</Text>
             <TouchableOpacity onPress={pickImage} style={s.cameraChip}>
               <Text style={s.cameraChipText}>
                 {store.imageUri ? '✓ Photo' : '+ Photo'}
@@ -387,7 +420,7 @@ export default function SymptomScreen() {
         {/* ── Common symptom chips ───────────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(380).delay(110)}>
           <SectionHeader
-            title="Common symptoms"
+            title={t('symptom.quick_select')}
             badge={selectedChips.length > 0 ? selectedChips.length : undefined}
           />
           <View style={s.chips}>
@@ -483,6 +516,23 @@ export default function SymptomScreen() {
       {/* ── Floating submit dock ──────────────────────────────────────── */}
       <View style={s.submitDock}>
         <Animated.View style={[s.submitBtnWrap, submitAnimStyle]}>
+          {/* ── Symptom count warning ──────────────────────────────── */}
+          {canSubmit && (
+            <View style={[
+              s.symptomWarn,
+              symptomCount >= 4 && s.symptomWarnOk,
+            ]}>
+              <Text style={[s.symptomWarnIcon, symptomCount >= 4 && s.symptomWarnIconOk]}>
+                {symptomCount >= 4 ? '✓' : '⚠'}
+              </Text>
+              <Text style={[s.symptomWarnText, symptomCount >= 4 && s.symptomWarnTextOk]}>
+                {symptomCount >= 4
+                  ? `${symptomCount} symptoms described — good detail`
+                  : `Describe at least 4 symptoms for accurate results (${symptomCount} so far)`}
+              </Text>
+            </View>
+          )}
+
           <Pressable
             style={[s.submitBtn, !canSubmit && s.submitBtnDisabled]}
             onPress={handleSubmit}
@@ -491,12 +541,12 @@ export default function SymptomScreen() {
             disabled={!canSubmit}
           >
             <Text style={s.submitText}>
-              {store.isAnalysing ? 'Analysing…' : 'Analyse symptoms →'}
+              {store.isAnalysing ? t('analysis.screen_title') : `${t('symptom.analyze_btn')} →`}
             </Text>
           </Pressable>
         </Animated.View>
         <Text style={s.submitHint}>
-          {store.isOnline ? 'Gemini AI + XGBoost · 132 conditions' : 'On-device TFLite · offline model'}
+          {store.isOnline ? 'Gemini AI · XGBoost · 133 conditions' : t('analysis.offline_note')}
         </Text>
       </View>
 
@@ -725,6 +775,13 @@ const s = StyleSheet.create({
   submitBtnDisabled: { backgroundColor: COLORS.borderMid },
   submitText:        { ...TYPE.titleLarge, color: COLORS.textInverse, letterSpacing: 0.2, fontSize: 17 },
   submitHint:        { ...TYPE.micro, color: COLORS.textFaint, textAlign: 'center', marginTop: 8, letterSpacing: 0.2 },
+
+  symptomWarn:       { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(180,90,0,0.08)', borderWidth: 1, borderColor: 'rgba(180,90,0,0.22)', borderRadius: RADIUS.lg, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12 },
+  symptomWarnOk:     { backgroundColor: 'rgba(58,95,82,0.08)', borderColor: 'rgba(58,95,82,0.22)' },
+  symptomWarnIcon:   { fontSize: 14, color: '#B45A00' },
+  symptomWarnIconOk: { color: COLORS.sage },
+  symptomWarnText:   { ...TYPE.bodySmall, color: '#B45A00', flex: 1, lineHeight: 18 },
+  symptomWarnTextOk: { color: COLORS.sage },
 
   // Modal
   modalOverlay:     { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,17,23,0.55)', justifyContent: 'flex-end' },

@@ -62,7 +62,11 @@
     "min_symptoms_warning": "Please describe at least one symptom",
     "add_image": "Add photo (wound / rash / X-ray)",
     "image_added": "Image added",
-    "image_optional": "Optional — helps with skin or wound analysis"
+    "image_optional": "Optional — helps with skin or wound analysis",
+    "photo_source_title": "Add Photo",
+    "photo_source_message": "Choose how to add a photo",
+    "take_photo": "Take Photo",
+    "choose_gallery": "Choose from Gallery"
   },
 
   "analysis": {
@@ -134,7 +138,8 @@
     "teleconsult_free": "Free government video consult",
     "available_now": "Available now",
     "book_slot": "Book slot",
-    "esanjeevani": "eSanjeevani OPD"
+    "esanjeevani": "eSanjeevani OPD",
+    "allow_location": "Allow location access"
   },
 
   "voice": {
@@ -161,6 +166,42 @@
     "clear_history": "Clear session history",
     "clear_confirm": "This will delete all your past health checks. Continue?",
     "cleared": "History cleared"
+  },
+
+  "audio_result": {
+    "title": "Audio Analysis",
+    "no_audio": "No audio analysis available",
+    "primary_finding": "Primary Finding",
+    "confidence": "Confidence: {{value}}",
+    "all_predictions": "All Predictions",
+    "method_title": "Analysis Method",
+    "method_text": "Audio model · Respiratory sound analysis"
+  },
+
+  "image_result": {
+    "title": "Image Analysis",
+    "no_image": "No image analysis available",
+    "primary_finding": "Primary Finding",
+    "dataset": "Dataset: {{value}}",
+    "all_predictions": "All Predictions",
+    "method_title": "Analysis Method"
+  },
+
+  "fusion_detail": {
+    "title": "Diagnosis Fusion",
+    "no_fusion": "No fusion details available",
+    "how_it_works": "How It Works",
+    "explanation": "Vaidya combines multiple AI models for accurate diagnosis. Each modality (text, audio, image) provides independent signals that are weighted and fused using confidence-based voting.",
+    "signal_weights": "Signal Weights",
+    "weight_text": "Text Analysis (XGBoost)",
+    "weight_audio": "Audio Analysis",
+    "weight_image": "Image Analysis",
+    "modalities_title": "Modalities Analyzed",
+    "modality_text": "Text symptoms",
+    "modality_audio": "Respiratory audio",
+    "modality_image": "Medical image",
+    "final_diagnosis": "Final Diagnosis",
+    "source_prefix": "Source: {{value}}"
   },
 
   "errors": {

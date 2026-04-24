@@ -210,3 +210,42 @@ async def stream_llm_fallback(symptoms: list[str], keywords=(), severity=None, l
     messages = _build_messages(symptoms, list(keywords), severity, language, version=version)
     async for chunk in _call_gemini_stream(messages):
         yield chunk
+
+
+_EXPLAIN_LANG_NOTE = {
+    "hi": "Respond in simple Hindi (Devanagari script). Keep medical terms in English.",
+    "ta": "Respond in simple Tamil script. Keep medical terms in English.",
+    "en": "Respond in simple English suitable for rural patients.",
+}
+
+async def enrich_diagnosis_with_gemini(
+    primary_diagnosis: str,
+    symptoms: list[str],
+    language: str = "en",
+) -> str | None:
+    """
+    Ask Gemini for a plain-language explanation of the diagnosis with
+    prevention and specific precautions. Returns a single formatted string,
+    or None on failure. Non-blocking — callers should never await this in the
+    critical path; use asyncio.create_task or shield.
+    """
+    if not settings.GEMINI_API_KEY:
+        return None
+    lang_note = _EXPLAIN_LANG_NOTE.get(language, _EXPLAIN_LANG_NOTE["en"])
+    prompt = (
+        f"A patient has been assessed with: **{primary_diagnosis}**.\n"
+        f"Reported symptoms: {', '.join(symptoms) or 'not specified'}.\n\n"
+        f"Write a brief, plain-language health guide (3 short sections):\n"
+        f"1. **What is {primary_diagnosis}?** (2-3 sentences, simple language)\n"
+        f"2. **How to prevent it** (3-4 bullet points)\n"
+        f"3. **What to do now** (3-4 specific action steps the patient should take)\n\n"
+        f"{lang_note}\n"
+        f"Keep each section short. No JSON. No medical jargon. No disclaimer needed."
+    )
+    messages = [{"role": "user", "parts": [{"text": prompt}]}]
+    try:
+        raw = await _call_gemini(messages)
+        return raw.strip() if raw else None
+    except Exception as exc:
+        logger.warning("vaidya.llm.enrich_failed", error=str(exc))
+        return None

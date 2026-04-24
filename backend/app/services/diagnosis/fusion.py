@@ -438,6 +438,10 @@ async def fuse_signals(
 
     should_fallback = nlp_alone_too_weak and fusion_still_weak
 
+    from app.services.diagnosis.llm_fallback import (
+        run_llm_fallback, enrich_diagnosis_with_gemini,
+    )
+
     if should_fallback:
         logger.info(
             "vaidya.fusion.llm_fallback",
@@ -445,7 +449,6 @@ async def fuse_signals(
             fused_conf=round(fused_confidence, 3),
             symptom_count=symptom_count,
         )
-        from app.services.diagnosis.llm_fallback import run_llm_fallback
         fallback = await run_llm_fallback(
             symptoms=extracted_symptoms or [],
             keywords=extracted_keywords or [],
@@ -454,6 +457,12 @@ async def fuse_signals(
         )
         # Preserve red flags from all signal sources
         fallback.red_flags = list(dict.fromkeys(red_flags + fallback.red_flags))
+        # Gemini fallback already includes description/precautions; still enrich
+        # with a plain-language guide if the diagnosis was determined
+        if fallback.primary_diagnosis and "Unable" not in fallback.primary_diagnosis:
+            fallback.gemini_explanation = await enrich_diagnosis_with_gemini(
+                fallback.primary_diagnosis, extracted_symptoms or [], language,
+            )
         meta["fallback_triggered"] = True
         logger.info("vaidya.fusion.complete", source="llm_gemini")
         return fallback, {
@@ -472,6 +481,11 @@ async def fuse_signals(
         modalities=meta["modalities_used"],
     )
 
+    # Enrich every online diagnosis with a Gemini plain-language health guide
+    gemini_explanation = await enrich_diagnosis_with_gemini(
+        primary_disease, extracted_symptoms or [], language,
+    )
+
     return DiagnosisResult(
         primary_diagnosis=primary_disease,
         confidence=round(fused_confidence, 4),
@@ -480,6 +494,7 @@ async def fuse_signals(
         red_flags=red_flags,
         description=nlp_result.description,
         precautions=nlp_result.precautions,
+        gemini_explanation=gemini_explanation,
     ), {
         "nlp": plan.w_nlp,
         "audio": plan.w_audio,

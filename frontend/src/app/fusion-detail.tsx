@@ -7,12 +7,14 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '@/store';
 import { COLORS, TYPE, RADIUS } from '@/constants';
 import { GradientCard } from '@/components/ui/GradientCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 
 export default function FusionDetailScreen() {
+  const { t } = useTranslation();
   const store = useAppStore();
   const session = store.currentSession;
 
@@ -20,9 +22,9 @@ export default function FusionDetailScreen() {
     return (
       <SafeAreaView style={s.safe}>
         <View style={s.center}>
-          <Text style={s.errorText}>No fusion details available</Text>
+          <Text style={s.errorText}>{t('fusion_detail.no_fusion')}</Text>
           <TouchableOpacity onPress={() => router.back()} style={s.errorBackBtn}>
-            <Text style={s.backBtnText}>Go Back</Text>
+            <Text style={s.backBtnText}>{t('common.back')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -43,39 +45,36 @@ export default function FusionDetailScreen() {
               <Text style={s.backGlyph}>←</Text>
             </View>
           </TouchableOpacity>
-          <Text style={s.headerTitle}>Diagnosis Fusion</Text>
+          <Text style={s.headerTitle}>{t('fusion_detail.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
         {/* Explanation */}
         <Animated.View entering={FadeInDown.duration(350)}>
           <GradientCard>
-            <SectionHeader title="How It Works" />
-            <Text style={s.explanation}>
-              Vaidya combines multiple AI models for accurate diagnosis. Each modality (text, audio, image)
-              provides independent signals that are weighted and fused using confidence-based voting.
-            </Text>
+            <SectionHeader title={t('fusion_detail.how_it_works')} />
+            <Text style={s.explanation}>{t('fusion_detail.explanation')}</Text>
           </GradientCard>
         </Animated.View>
 
         {/* Fusion Weights */}
         <Animated.View entering={FadeInDown.duration(350).delay(100)}>
           <GradientCard>
-            <SectionHeader title="Signal Weights" />
+            <SectionHeader title={t('fusion_detail.signal_weights')} />
             <View style={s.weightsContainer}>
               <View style={s.weightRow}>
-                <Text style={s.weightLabel}>Text Analysis (XGBoost)</Text>
+                <Text style={s.weightLabel}>{t('fusion_detail.weight_text')}</Text>
                 <Text style={s.weightValue}>{Math.round(weights.nlp * 100)}%</Text>
               </View>
               {hasAudio && (
                 <View style={s.weightRow}>
-                  <Text style={s.weightLabel}>Audio Analysis</Text>
+                  <Text style={s.weightLabel}>{t('fusion_detail.weight_audio')}</Text>
                   <Text style={s.weightValue}>{Math.round(weights.audio * 100)}%</Text>
                 </View>
               )}
               {hasVision && (
                 <View style={s.weightRow}>
-                  <Text style={s.weightLabel}>Image Analysis</Text>
+                  <Text style={s.weightLabel}>{t('fusion_detail.weight_image')}</Text>
                   <Text style={s.weightValue}>{Math.round(weights.vision * 100)}%</Text>
                 </View>
               )}
@@ -86,22 +85,22 @@ export default function FusionDetailScreen() {
         {/* Modalities Used */}
         <Animated.View entering={FadeInDown.duration(350).delay(200)}>
           <GradientCard>
-            <SectionHeader title="Modalities Analyzed" />
+            <SectionHeader title={t('fusion_detail.modalities_title')} />
             <View style={s.modalities}>
               <View style={s.modalityItem}>
                 <Text style={s.modalityIcon}>📝</Text>
-                <Text style={s.modalityText}>Text symptoms</Text>
+                <Text style={s.modalityText}>{t('fusion_detail.modality_text')}</Text>
               </View>
               {hasAudio && (
                 <View style={s.modalityItem}>
                   <Text style={s.modalityIcon}>🎤</Text>
-                  <Text style={s.modalityText}>Respiratory audio</Text>
+                  <Text style={s.modalityText}>{t('fusion_detail.modality_audio')}</Text>
                 </View>
               )}
               {hasVision && (
                 <View style={s.modalityItem}>
                   <Text style={s.modalityIcon}>📷</Text>
-                  <Text style={s.modalityText}>Medical image</Text>
+                  <Text style={s.modalityText}>{t('fusion_detail.modality_image')}</Text>
                 </View>
               )}
             </View>
@@ -111,9 +110,9 @@ export default function FusionDetailScreen() {
         {/* Final Diagnosis */}
         <Animated.View entering={FadeInDown.duration(350).delay(300)}>
           <GradientCard>
-            <SectionHeader title="Final Diagnosis" />
+            <SectionHeader title={t('fusion_detail.final_diagnosis')} />
             <Text style={s.finalDiagnosis}>{session.diagnosis.primary_diagnosis}</Text>
-            <Text style={s.diagnosisSource}>Source: {session.diagnosis.diagnosis_source}</Text>
+            <Text style={s.diagnosisSource}>{t('fusion_detail.source_prefix', { value: session.diagnosis.diagnosis_source })}</Text>
           </GradientCard>
         </Animated.View>
       </ScrollView>

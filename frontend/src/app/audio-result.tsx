@@ -7,12 +7,14 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useTranslation } from 'react-i18next';
 import { useAppStore } from '@/store';
 import { COLORS, TYPE, RADIUS } from '@/constants';
 import { GradientCard } from '@/components/ui/GradientCard';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 
 export default function AudioResultScreen() {
+  const { t } = useTranslation();
   const store = useAppStore();
   const session = store.currentSession;
 
@@ -20,9 +22,9 @@ export default function AudioResultScreen() {
     return (
       <SafeAreaView style={s.safe}>
         <View style={s.center}>
-          <Text style={s.errorText}>No audio analysis available</Text>
+          <Text style={s.errorText}>{t('audio_result.no_audio')}</Text>
           <TouchableOpacity onPress={() => router.back()} style={s.errorBackBtn}>
-            <Text style={s.backBtnText}>Go Back</Text>
+            <Text style={s.backBtnText}>{t('common.back')}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -41,16 +43,16 @@ export default function AudioResultScreen() {
               <Text style={s.backGlyph}>←</Text>
             </View>
           </TouchableOpacity>
-          <Text style={s.headerTitle}>Audio Analysis</Text>
+          <Text style={s.headerTitle}>{t('audio_result.title')}</Text>
           <View style={{ width: 36 }} />
         </View>
 
         {/* Top Prediction */}
         <Animated.View entering={FadeInDown.duration(350)}>
           <GradientCard>
-            <SectionHeader title="Primary Finding" />
+            <SectionHeader title={t('audio_result.primary_finding')} />
             <Text style={s.primaryFinding}>{audio.label || 'Respiratory assessment'}</Text>
-            <Text style={s.confidence}>Confidence: {audio.confidence_label || 'N/A'}</Text>
+            <Text style={s.confidence}>{t('audio_result.confidence', { value: audio.confidence_label || 'N/A' })}</Text>
           </GradientCard>
         </Animated.View>
 
@@ -58,7 +60,7 @@ export default function AudioResultScreen() {
         {audio.predictions && audio.predictions.length > 0 && (
           <Animated.View entering={FadeInDown.duration(350).delay(100)}>
             <GradientCard>
-              <SectionHeader title="All Predictions" />
+              <SectionHeader title={t('audio_result.all_predictions')} />
               {audio.predictions.map((pred: any, i: number) => (
                 <View key={i} style={s.predRow}>
                   <Text style={s.predLabel}>{pred.label}</Text>
@@ -72,8 +74,8 @@ export default function AudioResultScreen() {
         {/* Signal Source */}
         <Animated.View entering={FadeInDown.duration(350).delay(200)}>
           <GradientCard>
-            <SectionHeader title="Analysis Method" />
-            <Text style={s.signalSource}>Audio model · Respiratory sound analysis</Text>
+            <SectionHeader title={t('audio_result.method_title')} />
+            <Text style={s.signalSource}>{t('audio_result.method_text')}</Text>
           </GradientCard>
         </Animated.View>
       </ScrollView>

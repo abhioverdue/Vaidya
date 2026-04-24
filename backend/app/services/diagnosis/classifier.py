@@ -80,6 +80,39 @@ except Exception as e:
     logger.warning("vaidya.classifier.metadata_load_failed", error=str(e))
 
 
+# ── Severe-disease guards ─────────────────────────────────────────────────────
+# These diseases must NOT be predicted unless at least one "anchor" symptom is
+# present. Without a focal-neurological or organ-specific sign, the XGBoost
+# model over-fires on common symptom clusters (headache + vomiting).
+SEVERE_DISEASE_GUARDS: dict[str, dict] = {
+    "Brain Hemorrhage": {
+        "anchors": [
+            "weakness_of_one_body_side", "altered_sensorium",
+            "loss_of_consciousness", "slurred_speech",
+            "loss_of_balance", "unsteadiness", "coma",
+        ],
+        "min_total": 3,
+    },
+    "Paralysis (brain hemorrhage)": {
+        "anchors": [
+            "weakness_of_one_body_side", "altered_sensorium",
+            "loss_of_consciousness", "slurred_speech",
+        ],
+        "min_total": 2,
+    },
+}
+
+
+def _passes_guard(disease: str, symptom_vector: dict[str, int]) -> bool:
+    """Return False if a severe disease is predicted without its anchor symptoms."""
+    guard = SEVERE_DISEASE_GUARDS.get(disease)
+    if guard is None:
+        return True
+    total_active = sum(1 for v in symptom_vector.values() if v)
+    has_anchor = any(symptom_vector.get(s) for s in guard["anchors"])
+    return has_anchor or total_active >= guard["min_total"] + 2
+
+
 def nlp_models_loaded() -> bool:
     """Return True if all NLP artifacts were loaded successfully."""
     model, encoder, symptom_list = _load_model()
@@ -127,13 +160,22 @@ async def run_classifier(symptom_vector: dict[str, int]) -> DiagnosisResult:
     )
     proba = proba[0]
 
-    # Top-3 predictions — matches notebook output format
-    top_indices = np.argsort(proba)[::-1][:3]
+    # Top-5 candidates; primary is first that passes severe-disease guard
+    top_indices = np.argsort(proba)[::-1][:5]
     classes = encoder.classes_
 
-    primary_idx        = top_indices[0]
-    primary_disease    = classes[primary_idx]
-    primary_confidence = float(proba[primary_idx])
+    primary_idx, primary_disease, primary_confidence = None, None, 0.0
+    for idx in top_indices:
+        candidate = classes[idx]
+        if _passes_guard(candidate, symptom_vector):
+            primary_idx        = idx
+            primary_disease    = candidate
+            primary_confidence = float(proba[idx])
+            break
+    if primary_idx is None:          # all guarded (extremely unlikely)
+        primary_idx        = top_indices[0]
+        primary_disease    = classes[primary_idx]
+        primary_confidence = float(proba[primary_idx])
 
     differential = [
         {
@@ -145,9 +187,9 @@ async def run_classifier(symptom_vector: dict[str, int]) -> DiagnosisResult:
                 "Low"
             ),
         }
-        for i in top_indices[1:]
-        if float(proba[i]) > 0.05
-    ]
+        for i in top_indices
+        if i != primary_idx and float(proba[i]) > 0.05
+    ][:3]
 
     red_flags = _detect_red_flags(symptom_vector)
 

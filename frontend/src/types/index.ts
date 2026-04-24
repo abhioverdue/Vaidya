@@ -47,6 +47,8 @@ export interface DiagnosisResult {
   triage_reasoning?: string | null;
   when_to_seek_emergency?: string | null;
   confidence_reason?: string | null;
+  // Gemini plain-language health guide (present for all online diagnoses)
+  gemini_explanation?: string | null;
   disclaimer: string;
 }
 

@@ -19,11 +19,11 @@ env/
 *.egg
 
 # ── ML model artifacts (large binary files) ──────────────────────────────────
-models/
 *.pkl
 *.pth
 *.onnx
 *.h5
+*.tflite
 
 # ── Node ──────────────────────────────────────────────────────────────────────
 node_modules/

@@ -50,7 +50,6 @@ if (Platform.OS !== 'web') {
   }
 }
 
-import { useAppStore } from '@/store';
 import { COLORS, TYPE, RADIUS } from '@/constants';
 import { fetchHospitals } from '@/services/api';
 import type { HospitalResult, HospitalType } from '@/types';
@@ -392,8 +391,7 @@ const card = StyleSheet.create({
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function CareScreen() {
-  const { t }    = useTranslation();
-  const isOnline = useAppStore((s) => s.isOnline);
+  const { t } = useTranslation();
 
   const [viewMode, setViewMode]       = useState<'split' | 'map'>('split');
   const [activeTab, setActiveTab]     = useState<HospitalType | 'all'>('all');
@@ -468,7 +466,7 @@ export default function CareScreen() {
       type:      activeTab === 'all' ? undefined : activeTab,
       radius_km: 25,
     }),
-    enabled:  !!userLoc && isOnline,
+    enabled:  !!userLoc,
     staleTime: 2 * 60 * 1000,
   });
 
@@ -509,16 +507,14 @@ export default function CareScreen() {
   const mapContent = !permGranted ? (
     <Animated.View entering={FadeInDown.duration(400)} style={styles.locPrompt}>
       <Text style={styles.locIcon}>◎</Text>
-      <Text style={styles.locTitle}>Enable location</Text>
-      <Text style={styles.locBody}>
-        Live GPS tracking finds PHCs, CHCs, and hospitals near you and updates as you move.
-      </Text>
+      <Text style={styles.locTitle}>{t('home.find_hospital')}</Text>
+      <Text style={styles.locBody}>{t('care.loading_hospitals')}</Text>
       <TouchableOpacity style={styles.locBtn} onPress={startTracking}>
-        <Text style={styles.locBtnText}>Allow location access</Text>
+        <Text style={styles.locBtnText}>{t('care.allow_location')}</Text>
       </TouchableOpacity>
     </Animated.View>
   ) : Platform.OS === 'web' ? (
-    /* FIX-10: Web — OSM iframe */
+    /* Web — OSM iframe */
     <WebMapView
       userLat={userLoc?.lat ?? 12.97}
       userLng={userLoc?.lng ?? 79.16}
@@ -526,7 +522,7 @@ export default function CareScreen() {
       selected={selected}
       onSelectHospital={setSelected}
     />
-  ) : (
+  ) : MapView ? (
     /* Native — react-native-maps */
     <MapView
       ref={mapRef}
@@ -581,6 +577,15 @@ export default function CareScreen() {
         />
       ))}
     </MapView>
+  ) : (
+    /* react-native-maps failed to load — show OSM fallback */
+    <WebMapView
+      userLat={userLoc?.lat ?? 12.97}
+      userLng={userLoc?.lng ?? 79.16}
+      hospitals={hospitals}
+      selected={selected}
+      onSelectHospital={setSelected}
+    />
   );
 
   return (
@@ -592,13 +597,13 @@ export default function CareScreen() {
           <Text style={styles.backArrow}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Nearby care</Text>
+          <Text style={styles.headerTitle}>{t('care.screen_title')}</Text>
           <Text style={styles.headerSub}>
             {!permGranted
-              ? 'Tap location button to start'
+              ? t('care.loading_hospitals')
               : isLoading
-                ? 'Finding facilities…'
-                : `${hospitals.length} facilities · live GPS`}
+                ? t('care.loading_hospitals')
+                : `${hospitals.length} ${t('care.hospitals_tab').toLowerCase()} · GPS`}
           </Text>
         </View>
         <TouchableOpacity
@@ -606,7 +611,7 @@ export default function CareScreen() {
           onPress={() => setViewMode((m) => m === 'split' ? 'map' : 'split')}
         >
           <Text style={styles.viewToggleText}>
-            {viewMode === 'split' ? 'Full map' : 'List'}
+            {viewMode === 'split' ? t('care.hospitals_tab') : t('common.back')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -662,15 +667,15 @@ export default function CareScreen() {
           {isLoading && !hospitals.length && (
             <View style={styles.loadRow}>
               <ActivityIndicator size="small" color={COLORS.sage} />
-              <Text style={styles.loadText}>Searching nearby…</Text>
+              <Text style={styles.loadText}>{t('care.loading_hospitals')}</Text>
             </View>
           )}
 
           {!!error && !isLoading && (
             <View style={styles.errorRow}>
-              <Text style={styles.errorText}>Could not load facilities</Text>
+              <Text style={styles.errorText}>{t('care.no_hospitals')}</Text>
               <TouchableOpacity onPress={() => refetch()} style={styles.retryBtn}>
-                <Text style={styles.retryText}>Retry</Text>
+                <Text style={styles.retryText}>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -692,11 +697,11 @@ export default function CareScreen() {
               <View>
                 <TouchableOpacity
                   style={styles.teleRow}
-                  onPress={() => Linking.openURL('https://esanjeevaniopd.in')}
+                  onPress={() => Linking.openURL('https://esanjeevani.mohfw.gov.in/#/')}
                 >
                   <View style={styles.teleLeft}>
-                    <Text style={styles.teleTitle}>eSanjeevani teleconsult</Text>
-                    <Text style={styles.teleSub}>Free video consultation · No travel needed</Text>
+                    <Text style={styles.teleTitle}>{t('care.esanjeevani')}</Text>
+                    <Text style={styles.teleSub}>{t('care.teleconsult_free')}</Text>
                   </View>
                   <Text style={styles.teleArrow}>→</Text>
                 </TouchableOpacity>
@@ -705,7 +710,7 @@ export default function CareScreen() {
                   style={styles.emergencyBtn}
                   onPress={() => Linking.openURL('tel:108')}
                 >
-                  <Text style={styles.emergencyText}>Call 108 ambulance — free</Text>
+                  <Text style={styles.emergencyText}>{t('common.call_emergency')} — free</Text>
                 </TouchableOpacity>
 
                 <View style={{ height: 40 }} />

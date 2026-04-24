@@ -155,11 +155,11 @@ const sr = StyleSheet.create({
 // ── SOURCE LABELS ─────────────────────────────────────────────────────────────
 
 const SOURCE_LABELS: Record<string, string> = {
-  xgboost:       'XGBoost classifier',
-  fusion:        'Fusion model',
-  llm_fallback:  'Gemini AI fallback',
-  llm_gemini:    'Gemini AI',
-  tflite_offline:'On-device TFLite',
+  xgboost:        'AI symptom analysis',
+  fusion:         'Multimodal AI analysis',
+  llm_fallback:   'Gemini AI analysis',
+  llm_gemini:     'Gemini AI analysis',
+  tflite_offline: 'On-device AI · offline',
 };
 
 // ── ResultScreen ──────────────────────────────────────────────────────────────
@@ -245,7 +245,7 @@ export default function ResultScreen() {
         {triageLevel && triageLevel >= 4 && (
           <Animated.View entering={FadeInDown.duration(350).delay(60)} style={{ marginBottom: 10 }}>
             <ActionButton
-              label="Call emergency services · 108"
+              label={`${t('common.call_emergency')} · Emergency`}
               onPress={async () => {
                 await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                 Linking.openURL('tel:108');
@@ -291,7 +291,7 @@ export default function ResultScreen() {
         {(diagnosis as DiagnosisResult).red_flags?.length > 0 && (
           <Animated.View entering={FadeInDown.duration(350).delay(100)}>
             <GradientCard tint="rgba(194,59,34,0.04)" style={s.redFlagCard}>
-              <SectionHeader title="Warning signs" />
+              <SectionHeader title={t('result.red_flags_label')} />
               {(diagnosis as DiagnosisResult).red_flags.map((flag, i) => (
                 <View key={i} style={s.flagRow}>
                   <View style={s.flagDot} />
@@ -315,7 +315,7 @@ export default function ResultScreen() {
         {/* ── Primary diagnosis card ───────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(350).delay(130)}>
           <GradientCard variant="elevated">
-            <Text style={s.cardLabel}>PRIMARY DIAGNOSIS</Text>
+            <Text style={s.cardLabel}>{t('result.diagnosis_label').toUpperCase()}</Text>
             <Text style={s.diagName}>{diagnosis.primary_diagnosis}</Text>
 
             {diagnosis.confidence >= 0.80 && (
@@ -333,7 +333,7 @@ export default function ResultScreen() {
             <View style={s.confSection}>
               <ScoreRing confidence={confidence} color={cfg?.color ?? COLORS.sage} />
               <View style={s.confDetails}>
-                <Text style={s.confMetaLabel}>Confidence</Text>
+                <Text style={s.confMetaLabel}>{t('result.confidence_label')}</Text>
                 <Text style={[s.confValueLabel, { color: cfg?.color ?? COLORS.sage }]}>{confLabel}</Text>
                 <AnimatedConfidenceBar value={confidence} color={cfg?.color ?? COLORS.sage} delay={300} />
               </View>
@@ -354,10 +354,10 @@ export default function ResultScreen() {
         {online && (session as FullTriageResponse).audio_result && (
           <Animated.View entering={FadeInDown.duration(350).delay(160)}>
             <GradientCard>
-              <Text style={s.cardLabel}>AUDIO ANALYSIS</Text>
+              <Text style={s.cardLabel}>{t('audio_result.title').toUpperCase()}</Text>
               <Text style={s.diagName}>{(session as FullTriageResponse).audio_result.label || 'Respiratory assessment'}</Text>
               <View style={s.confRow}>
-                <Text style={s.confMetaLabel}>Confidence</Text>
+                <Text style={s.confMetaLabel}>{t('result.confidence_label')}</Text>
                 <AnimatedConfidenceBar
                   value={Math.round(((session as FullTriageResponse).audio_result.confidence || 0) * 100)}
                   color={COLORS.sage}
@@ -372,10 +372,10 @@ export default function ResultScreen() {
         {online && (session as FullTriageResponse).vision_result && (
           <Animated.View entering={FadeInDown.duration(350).delay(180)}>
             <GradientCard>
-              <Text style={s.cardLabel}>IMAGE ANALYSIS</Text>
+              <Text style={s.cardLabel}>{t('image_result.title').toUpperCase()}</Text>
               <Text style={s.diagName}>{(session as FullTriageResponse).vision_result?.top_prediction || 'Pathology detected'}</Text>
               <View style={s.confRow}>
-                <Text style={s.confMetaLabel}>Confidence</Text>
+                <Text style={s.confMetaLabel}>{t('result.confidence_label')}</Text>
                 <AnimatedConfidenceBar
                 value={Math.round(((session as FullTriageResponse).vision_result.all_predictions?.[0]?.confidence ?? 0.85) * 100)}
                 color={COLORS.sage}
@@ -399,8 +399,23 @@ export default function ResultScreen() {
         {online && (diagnosis as DiagnosisResult).description ? (
           <Animated.View entering={FadeInDown.duration(350).delay(200)}>
             <GradientCard>
-              <Text style={s.cardLabel}>ABOUT THIS CONDITION</Text>
+              <Text style={s.cardLabel}>{t('result.description_label').toUpperCase()}</Text>
               <Text style={s.descText}>{(diagnosis as DiagnosisResult).description}</Text>
+            </GradientCard>
+          </Animated.View>
+        ) : null}
+
+        {/* ── Gemini AI health guide ───────────────────────────────── */}
+        {online && (diagnosis as DiagnosisResult).gemini_explanation ? (
+          <Animated.View entering={FadeInDown.duration(350).delay(215)}>
+            <GradientCard>
+              <View style={s.geminiHeader}>
+                <Text style={s.cardLabel}>AI HEALTH GUIDE</Text>
+                <View style={s.geminiBadge}>
+                  <Text style={s.geminiBadgeText}>✦ Gemini</Text>
+                </View>
+              </View>
+              <Text style={s.geminiText}>{(diagnosis as DiagnosisResult).gemini_explanation}</Text>
             </GradientCard>
           </Animated.View>
         ) : null}
@@ -409,7 +424,7 @@ export default function ResultScreen() {
         {diagnosis.differential.length > 0 && (
           <Animated.View entering={FadeInDown.duration(350).delay(230)}>
             <GradientCard>
-              <Text style={s.cardLabel}>OTHER POSSIBILITIES</Text>
+              <Text style={s.cardLabel}>{t('result.differential_label').toUpperCase()}</Text>
               {diagnosis.differential.slice(0, 4).map((d, i) => {
                 const pct = Math.round(d.confidence * 100);
                 return (
@@ -436,7 +451,7 @@ export default function ResultScreen() {
         {online && (diagnosis as DiagnosisResult).precautions?.length > 0 && (
           <Animated.View entering={FadeInDown.duration(350).delay(260)}>
             <GradientCard>
-              <Text style={s.cardLabel}>RECOMMENDED STEPS</Text>
+              <Text style={s.cardLabel}>{t('result.precautions_label').toUpperCase()}</Text>
               {(diagnosis as DiagnosisResult).precautions.map((p, i) => (
                 <View key={i} style={s.precRow}>
                   <View style={s.precNum}>
@@ -452,14 +467,14 @@ export default function ResultScreen() {
         {/* ── Action buttons (stacked) ─────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(350).delay(300)} style={s.actionStack}>
           <ActionButton
-            label="Find care nearby  →"
+            label={`${t('result.find_care')}  →`}
             onPress={() => router.push('/care')}
             variant="primary"
             fullWidth
           />
           <View style={s.actionRow}>
-            <ActionButton label="New check" onPress={() => { useAppStore.getState().resetInput(); router.replace('/symptom' as any); }} variant="secondary" />
-            <ActionButton label="Home"      onPress={() => router.replace('/')}        variant="outline" />
+            <ActionButton label={t('result.new_check')} onPress={() => { useAppStore.getState().resetInput(); router.replace('/symptom' as any); }} variant="secondary" />
+            <ActionButton label={t('common.back')}      onPress={() => router.replace('/')}        variant="outline" />
           </View>
         </Animated.View>
 
@@ -540,6 +555,12 @@ const s = StyleSheet.create({
 
   sourceSep:     { borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 12 },
   descText:      { ...TYPE.bodyMed, color: COLORS.textSub, lineHeight: 24 },
+
+  // Gemini AI health guide
+  geminiHeader:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  geminiBadge:     { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(66,133,244,0.08)', borderRadius: RADIUS.pill, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1, borderColor: 'rgba(66,133,244,0.18)' },
+  geminiBadgeText: { fontSize: 10, fontWeight: '700', color: '#4285F4', letterSpacing: 0.3 },
+  geminiText:      { ...TYPE.bodyMed, color: COLORS.textSub, lineHeight: 24 },
 
   // Differential
   diffRow:      { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
