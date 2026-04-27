@@ -3,7 +3,7 @@ import { Buffer } from 'buffer';
 import process from 'process';
 
 // BUILD MARKER — if this appears in logcat the bundle is fresh
-console.log('[VAIDYA] BUILD-2026-04-17-C-json-require');
+console.log('[VAIDYA] BUILD-2026-04-26-E-firebase-lazy');
 
 // ── Global error handler — runs before React mounts ───────────────────────────
 // Catches fatal JS errors that happen before the error boundary is mounted.

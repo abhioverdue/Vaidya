@@ -16,6 +16,7 @@ from app.api.v1.endpoints import (
     patients as patients_ep,
     analytics as analytics_ep,
     asha as asha_ep,
+    otp as otp_ep,
 )
 from app.core.security import rate_limit
 
@@ -31,3 +32,4 @@ api_router.include_router(care_ep.router,      prefix="/care",      tags=["care"
 api_router.include_router(patients_ep.router,  prefix="/patients",  tags=["patients"])
 api_router.include_router(analytics_ep.router, prefix="/analytics", tags=["analytics"])
 api_router.include_router(asha_ep.router,      prefix="/asha",      tags=["asha"])
+api_router.include_router(otp_ep.router,       prefix="/auth/otp",  tags=["otp"])

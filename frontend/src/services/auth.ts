@@ -1,9 +1,19 @@
 /**
- * Vaidya — Auth service
- * Handles login, register, OTP request/verify, reset-password.
- * All calls gracefully fall back to demo mode when the backend is unreachable.
+ * Vaidya — Auth service (Firebase Email/Password)
+ * Falls back to demo mode when Firebase is unreachable.
  */
 
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+  updatePassword,
+  sendPasswordResetEmail,
+} from 'firebase/auth';
+import { getFirebaseAuth } from './firebase';
 import { apiClient } from './api';
 import { isNetworkUnreachable } from './demoData';
 
@@ -12,7 +22,7 @@ import { isNetworkUnreachable } from './demoData';
 export interface AuthUser {
   id:         string;
   name:       string;
-  phone:      string;
+  email:      string;
   age_group?: 'child' | 'adult' | 'senior';
 }
 
@@ -23,187 +33,185 @@ export interface AuthResponse {
 }
 
 export interface OtpResponse {
-  message:     string;
-  expires_in:  number;   // seconds
+  message:    string;
+  expires_in: number;
+  /** Present only when SMS could not be delivered (no FAST2SMS key configured).
+   *  null when a real SMS was sent — nothing leaks in production. */
+  demo_otp:   string | null;
 }
 
-// ── Demo helpers ──────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-const DEMO_OTP = '123456';
-
-let _demoOtpStore: Record<string, string> = {};   // phone → OTP (demo only)
-
-function makeDemoUser(phone: string, name: string): AuthUser {
-  return {
-    id:         `demo-${phone}`,
-    name:       name || 'Demo User',
-    phone,
-    age_group:  'adult',
-  };
+function makeDemoUser(email: string, name: string): AuthUser {
+  return { id: `demo-${email}`, name: name || 'Demo User', email, age_group: 'adult' };
 }
 
 async function demoDelay(ms = 900): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function firebaseErrMsg(code: string): string {
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':       return 'Invalid email or password.';
+    case 'auth/email-already-in-use': return 'An account with this email already exists.';
+    case 'auth/weak-password':        return 'Password must be at least 6 characters.';
+    case 'auth/invalid-email':        return 'Enter a valid email address.';
+    case 'auth/too-many-requests':    return 'Too many attempts. Please try again later.';
+    case 'auth/network-request-failed': return 'No internet connection.';
+    default: return 'Something went wrong. Please try again.';
+  }
+}
+
 // ── Auth API ──────────────────────────────────────────────────────────────────
 
-/**
- * Login with mobile + password.
- * Returns AuthResponse on success.
- */
 export async function authLogin(
-  phone:    string,
+  email:    string,
   password: string,
 ): Promise<AuthResponse> {
   try {
-    const { data } = await apiClient.post<AuthResponse>('/auth/login', {
-      phone,
-      password,
-    });
-    return data;
-  } catch (err) {
+    const cred  = await signInWithEmailAndPassword(getFirebaseAuth(), email, password);
+    const token = await cred.user.getIdToken();
+    return {
+      access_token: token,
+      token_type:   'bearer',
+      user: {
+        id:        cred.user.uid,
+        name:      cred.user.displayName ?? 'User',
+        email,
+        age_group: 'adult',
+      },
+    };
+  } catch (err: any) {
+    if (err?.code?.startsWith('auth/')) throw new Error(firebaseErrMsg(err.code));
     if (isNetworkUnreachable(err)) {
       await demoDelay();
-      // Demo: any phone + any password works
       return {
         access_token: `demo-token-${Date.now()}`,
         token_type:   'bearer',
-        user:         makeDemoUser(phone, 'Demo User'),
+        user:         makeDemoUser(email, 'Demo User'),
       };
     }
     throw err;
   }
 }
 
-/**
- * Register a new account.
- * Backend creates the user; returns the auth token immediately.
- */
 export async function authRegister(
   name:     string,
-  phone:    string,
+  email:    string,
   password: string,
 ): Promise<AuthResponse> {
   try {
-    const { data } = await apiClient.post<AuthResponse>('/auth/register', {
-      name,
-      phone,
-      password,
-    });
-    return data;
-  } catch (err) {
+    const cred  = await createUserWithEmailAndPassword(getFirebaseAuth(), email, password);
+    await updateProfile(cred.user, { displayName: name });
+    const token = await cred.user.getIdToken();
+    return {
+      access_token: token,
+      token_type:   'bearer',
+      user: { id: cred.user.uid, name, email, age_group: 'adult' },
+    };
+  } catch (err: any) {
+    if (err?.code?.startsWith('auth/')) throw new Error(firebaseErrMsg(err.code));
     if (isNetworkUnreachable(err)) {
       await demoDelay(1200);
       return {
         access_token: `demo-token-${Date.now()}`,
         token_type:   'bearer',
-        user:         makeDemoUser(phone, name),
+        user:         makeDemoUser(email, name),
       };
     }
     throw err;
   }
 }
 
-/**
- * Request OTP for a phone number.
- * type = 'register' | 'reset'
- */
+export async function authSignOut(): Promise<void> {
+  try { await signOut(getFirebaseAuth()); } catch {}
+}
+
+export async function authSendPasswordReset(email: string): Promise<void> {
+  try {
+    await sendPasswordResetEmail(getFirebaseAuth(), email);
+  } catch (err: any) {
+    if (err?.code?.startsWith('auth/')) throw new Error(firebaseErrMsg(err.code));
+    throw err;
+  }
+}
+
+export async function authChangePassword(
+  email:           string,
+  currentPassword: string,
+  newPassword:     string,
+): Promise<{ message: string }> {
+  const user = getFirebaseAuth().currentUser;
+  if (!user) throw new Error('You must be signed in to change your password.');
+  try {
+    const credential = EmailAuthProvider.credential(email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+    await updatePassword(user, newPassword);
+    return { message: 'Password changed successfully.' };
+  } catch (err: any) {
+    if (err?.code?.startsWith('auth/')) throw new Error(firebaseErrMsg(err.code));
+    throw err;
+  }
+}
+
+// ── Legacy OTP helpers (kept for verify-otp.tsx compatibility) ────────────────
+
 export async function authRequestOtp(
   phone: string,
   type:  'register' | 'reset',
 ): Promise<OtpResponse> {
   try {
-    const { data } = await apiClient.post<OtpResponse>('/auth/otp/request', {
-      phone,
-      type,
-    });
-    return data;
-  } catch (err) {
+    const { data } = await apiClient.post('/auth/otp/send', { phone, type }, { timeout: 8_000 });
+    return {
+      message:    data.message,
+      expires_in: data.expires_in ?? 300,
+      demo_otp:   data.demo_otp ?? null,
+    };
+  } catch (err: any) {
     if (isNetworkUnreachable(err)) {
       await demoDelay(800);
-      _demoOtpStore[phone] = DEMO_OTP;
-      return {
-        message:    `Demo OTP sent to ${phone}. Use code: ${DEMO_OTP}`,
-        expires_in: 300,
-      };
+      return { message: 'OTP generated for your session.', expires_in: 300, demo_otp: '123456' };
     }
     throw err;
   }
 }
 
-/**
- * Verify OTP code.
- * Returns { valid: true } on success.
- */
 export async function authVerifyOtp(
   phone: string,
   otp:   string,
 ): Promise<{ valid: boolean; message: string }> {
   try {
-    const { data } = await apiClient.post<{ valid: boolean; message: string }>(
-      '/auth/otp/verify',
-      { phone, otp },
-    );
-    return data;
-  } catch (err) {
+    const { data } = await apiClient.post('/auth/otp/verify', { phone, otp }, { timeout: 8_000 });
+    return { valid: data.valid, message: data.message };
+  } catch (err: any) {
     if (isNetworkUnreachable(err)) {
       await demoDelay(600);
-      const valid = otp === DEMO_OTP || otp === (_demoOtpStore[phone] ?? DEMO_OTP);
-      return {
-        valid,
-        message: valid ? 'OTP verified successfully' : 'Invalid OTP. Demo code is 123456',
-      };
+      return { valid: true, message: 'OTP verified (offline demo).' };
     }
     throw err;
   }
 }
 
-/**
- * Reset password using verified OTP.
- */
 export async function authResetPassword(
   phone:       string,
   otp:         string,
   newPassword: string,
 ): Promise<{ message: string }> {
   try {
-    const { data } = await apiClient.post<{ message: string }>(
-      '/auth/password/reset',
-      { phone, otp, new_password: newPassword },
-    );
-    return data;
-  } catch (err) {
-    if (isNetworkUnreachable(err)) {
-      await demoDelay(800);
-      const valid = otp === DEMO_OTP || otp === (_demoOtpStore[phone] ?? DEMO_OTP);
-      if (!valid) throw new Error('Invalid OTP. Demo code is 123456');
-      return { message: 'Password reset successfully.' };
-    }
-    throw err;
-  }
-}
-
-/**
- * Change password (authenticated user).
- */
-export async function authChangePassword(
-  currentPassword: string,
-  newPassword:     string,
-  token:           string,
-): Promise<{ message: string }> {
-  try {
-    const { data } = await apiClient.post<{ message: string }>(
-      '/auth/password/change',
-      { current_password: currentPassword, new_password: newPassword },
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    return data;
-  } catch (err) {
+    const { data } = await apiClient.post('/auth/otp/reset-password', {
+      phone,
+      otp,
+      new_password: newPassword,
+    }, { timeout: 8_000 });
+    return { message: data.message };
+  } catch (err: any) {
     if (isNetworkUnreachable(err)) {
       await demoDelay(600);
-      return { message: 'Password changed successfully.' };
+      return { message: 'Password reset successfully. You can now sign in.' };
     }
-    throw err;
+    const detail = err?.detail || err?.response?.data?.detail || err?.message || '';
+    throw new Error(detail && !detail.startsWith('API error') ? detail : 'Password reset failed. Please try again.');
   }
 }

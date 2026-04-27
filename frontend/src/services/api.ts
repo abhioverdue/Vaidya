@@ -68,8 +68,13 @@ apiClient.interceptors.response.use(
   (r) => r,
   (err: AxiosError) => {
     if (err instanceof OfflineError) throw err;
-    const status  = err.response?.status;
-    const detail  = (err.response?.data as any)?.detail ?? '';
+    // No response = network/timeout issue. Pass the raw AxiosError through so
+    // isNetworkUnreachable() can read its original message/code and trigger the
+    // demo fallback. Wrapping it in ApiRequestError buries the message and
+    // produces the cryptic "API error undefined:" that users see.
+    if (!err.response) throw err;
+    const status  = err.response.status;
+    const detail  = (err.response.data as any)?.detail ?? '';
     throw new ApiRequestError(status, String(detail), err);
   },
 );
@@ -195,25 +200,27 @@ export async function triageMultimodal(payload: {
   }
 }
 
-/** Find nearby hospitals and PHCs */
-export async function findHospitals(
-  lat: number,
-  lng: number,
-  radiusKm = 50,
-): Promise<HospitalListResponse> {
-  try {
-    const { data } = await apiClient.get<HospitalListResponse>('/care/hospitals', {
-      params: { lat, lng, radius_km: radiusKm },
-    });
-    return data;
-  } catch (err) {
-    if (isNetworkUnreachable(err)) {
-      markDemoMode();
-      await _demoDelay(600);
-      return DEMO_HOSPITALS;
-    }
-    throw err;
-  }
+export interface CoughResult {
+  detected:   boolean;
+  label:      string;
+  confidence: number;
+  severity:   'severe' | 'mild' | null;
+}
+
+/** Send recorded audio for cough detection — returns result in ~1s, no full triage */
+export async function analyzeCoughAudio(audioUri: string): Promise<CoughResult> {
+  const form = new FormData();
+  form.append('audio_file', {
+    uri:  audioUri,
+    name: 'recording.wav',
+    type: 'audio/wav',
+  } as any);
+  const { data } = await apiClient.post<CoughResult>(
+    '/diagnose/audio',
+    form,
+    { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 12_000 },
+  );
+  return data;
 }
 
 /** Get eSanjeevani teleconsult slots */
@@ -241,14 +248,23 @@ export async function fetchHospitals(params: {
   lat: number; lng: number; type?: string; radius_km?: number;
 }): Promise<HospitalListResponse> {
   try {
-    const { data } = await apiClient.get<HospitalListResponse>('/care/hospitals', { params });
-    return data;
+    const { data } = await apiClient.get<HospitalListResponse>('/care/hospitals', {
+      params,
+      timeout: 45_000,  // Overpass can take up to 28s; give it 45s before falling back
+    });
+    if (data?.results?.length) return data;
+    // Backend returned 0 results — static DB should have prevented this; show demo
+    console.warn('[Vaidya] fetchHospitals: backend returned 0 results', params);
+    markDemoMode();
+    return DEMO_HOSPITALS;
   } catch (err) {
+    console.warn('[Vaidya] fetchHospitals failed:', (err as any)?.message, (err as any)?.code, BASE_URL);
     if (isNetworkUnreachable(err)) {
       markDemoMode();
-      await _demoDelay(600);
+      await _demoDelay(400);
       return DEMO_HOSPITALS;
     }
+    // Server reachable but returned an error — re-throw so care.tsx shows retry button
     throw err;
   }
 }

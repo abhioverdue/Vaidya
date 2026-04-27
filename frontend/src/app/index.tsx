@@ -14,20 +14,22 @@ import Animated, {
   FadeIn, FadeInDown,
   useAnimatedStyle, useSharedValue,
   withSpring, withRepeat, withTiming, withSequence, withDelay,
-  interpolate, Easing,
+  interpolate, Easing, cancelAnimation,
 } from 'react-native-reanimated';
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
 import { useAppStore } from '@/store';
 import { COLORS, TRIAGE_CONFIG, TYPE, RADIUS, STORAGE_KEYS } from '@/constants';
+import { mScale, vScale } from '@/utils/responsive';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { DemoBanner } from '@/components/ui/DemoBanner';
 import { StatusIndicator } from '@/components/ui/StatusIndicator';
 import { TriageTag } from '@/components/ui/TriageTag';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { useDemoMode } from '@/hooks/useDemoMode';
+import { getSessionCount, checkOutbreakSignal, type OutbreakSignal } from '@/services/firestore';
 import type { TriageLevel, TriageSession } from '@/types';
 
 function getGreetingKey(): 'greeting_morning' | 'greeting_afternoon' | 'greeting_evening' {
@@ -64,6 +66,7 @@ function WaveBar({
         false,
       ),
     );
+    return () => cancelAnimation(height);
   }, []);
 
   const animStyle = useAnimatedStyle(() => ({ height: height.value }));
@@ -103,8 +106,8 @@ const hw = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    height: 40,
-    marginTop: 16,
+    height: vScale(40),
+    marginTop: vScale(16),
     marginBottom: 4,
   },
 });
@@ -145,6 +148,7 @@ function PulsingRing({ color, size }: { color: string; size: number }) {
   useEffect(() => {
     ring1.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.out(Easing.quad) }), -1, false);
     ring2.value = withDelay(900, withRepeat(withTiming(1, { duration: 1800, easing: Easing.out(Easing.quad) }), -1, false));
+    return () => { cancelAnimation(ring1); cancelAnimation(ring2); };
   }, []);
 
   const r1Style = useAnimatedStyle(() => ({
@@ -285,6 +289,13 @@ export default function HomeScreen() {
   const isOnline   = useAppStore((s) => s.isOnline);
   const isDemoMode = useDemoMode();
 
+  const [globalCount,    setGlobalCount]    = useState<number | null>(null);
+  const [outbreakSignal, setOutbreakSignal] = useState<OutbreakSignal | null>(null);
+  useEffect(() => {
+    getSessionCount().then(setGlobalCount).catch(() => {});
+    checkOutbreakSignal(48, 5).then(setOutbreakSignal).catch(() => {});
+  }, []);
+
   // Emergency button pulse
   const emergencyScale = useSharedValue(1);
   useEffect(() => {
@@ -295,6 +306,7 @@ export default function HomeScreen() {
       ),
       -1, false,
     );
+    return () => cancelAnimation(emergencyScale);
   }, []);
   const emergencyDotStyle = useAnimatedStyle(() => ({ transform: [{ scale: emergencyScale.value }] }));
 
@@ -361,7 +373,9 @@ export default function HomeScreen() {
           <StatChip dot="●" label="132 conditions" />
           <StatChip dot="◎" label="AI-powered" />
           <StatChip dot="◈" label="3 languages" />
-          <StatChip dot="◉" label="Offline ready" />
+          {globalCount !== null && globalCount > 0
+            ? <StatChip dot="◉" label={`${globalCount.toLocaleString()} sessions`} />
+            : <StatChip dot="◉" label="Offline ready" />}
         </Animated.View>
 
         {/* ── Primary CTA ─────────────────────────────────────────────── */}
@@ -385,6 +399,28 @@ export default function HomeScreen() {
             <QuickActionCard title="Settings" subtitle="Language · Profile" onPress={() => router.push('/settings')} />
           </View>
         </Animated.View>
+
+        {/* ── Outbreak alert (community crisis signal) ────────────────── */}
+        {outbreakSignal && (
+          <Animated.View entering={FadeInDown.duration(360).delay(220)}>
+            <TouchableOpacity
+              style={styles.outbreakBanner}
+              onPress={() => router.push('/symptom')}
+              activeOpacity={0.85}
+            >
+              <View style={styles.outbreakLeft}>
+                <Text style={styles.outbreakIcon}>⚠</Text>
+                <View style={styles.outbreakBody}>
+                  <Text style={styles.outbreakTitle}>Community Alert</Text>
+                  <Text style={styles.outbreakSub}>
+                    {outbreakSignal.count} cases of {outbreakSignal.diagnosis} reported in the last {outbreakSignal.hours}h
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.outbreakArrow}>›</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
 
         {/* ── Emergency strip ─────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(400).delay(240)}>
@@ -469,7 +505,7 @@ const styles = StyleSheet.create({
   // Hero
   hero:      { marginBottom: 16, paddingTop: 8 },
   greeting:  { ...TYPE.micro, color: COLORS.sage, letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 10, fontWeight: '700' },
-  heroTitle: { fontSize: 38, fontWeight: '700', letterSpacing: -1.2, lineHeight: 44, color: COLORS.ink, marginBottom: 2 },
+  heroTitle: { fontSize: mScale(38), fontWeight: '700', letterSpacing: -1.2, lineHeight: mScale(44), color: COLORS.ink, marginBottom: 2 },
   heroMeta:  { ...TYPE.bodySmall, color: COLORS.textMuted, marginTop: 6 },
 
   // Stats chips
@@ -477,7 +513,7 @@ const styles = StyleSheet.create({
 
   // Quick-action cards
   qCard:          { borderRadius: RADIUS.xl, padding: 20, overflow: 'hidden' },
-  qCardPrimary:   { backgroundColor: COLORS.ink, minHeight: 160 },
+  qCardPrimary:   { backgroundColor: COLORS.ink, minHeight: vScale(150) },
   qCardSecondary: {
     backgroundColor: COLORS.surface,
     borderWidth: 1, borderColor: COLORS.border,
@@ -509,6 +545,20 @@ const styles = StyleSheet.create({
 
   secondaryRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   half:         { flex: 1 },
+
+  // Outbreak alert
+  outbreakBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: 'rgba(154,107,31,0.08)',
+    borderRadius: RADIUS.lg, borderWidth: 1.5, borderColor: 'rgba(154,107,31,0.3)',
+    padding: 14, marginBottom: 10,
+  },
+  outbreakLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  outbreakIcon:  { fontSize: 20, color: COLORS.gold },
+  outbreakBody:  { flex: 1, gap: 2 },
+  outbreakTitle: { fontSize: 13, fontWeight: '700', color: COLORS.gold, letterSpacing: 0.2 },
+  outbreakSub:   { fontSize: 11, color: COLORS.gold, opacity: 0.85, lineHeight: 16 },
+  outbreakArrow: { fontSize: 20, color: COLORS.gold, opacity: 0.6 },
 
   // Emergency
   emergency:     {

@@ -23,7 +23,7 @@ import React, {
 import {
   View, Text, TouchableOpacity, ScrollView, FlatList,
   StyleSheet, Linking, ActivityIndicator, Platform,
-  Dimensions, Animated as RNAnimated,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -37,6 +37,7 @@ let MapView: any = null;
 let Marker: any = null;
 let Circle: any = null;
 let PROVIDER_DEFAULT: any = null;
+let PROVIDER_GOOGLE: any  = null;
 
 if (Platform.OS !== 'web') {
   try {
@@ -45,10 +46,15 @@ if (Platform.OS !== 'web') {
     Marker           = RNMaps.Marker;
     Circle           = RNMaps.Circle;
     PROVIDER_DEFAULT = RNMaps.PROVIDER_DEFAULT;
+    PROVIDER_GOOGLE  = RNMaps.PROVIDER_GOOGLE;
   } catch (e) {
     console.warn('[Vaidya] react-native-maps failed to load — map will be unavailable:', e);
   }
 }
+
+// Use Google Maps provider explicitly on Android so Google Maps tiles render
+// and the Google Maps branding is visible (required for Google Solutions demo).
+const MAP_PROVIDER = Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT;
 
 import { COLORS, TYPE, RADIUS } from '@/constants';
 import { fetchHospitals } from '@/services/api';
@@ -56,9 +62,7 @@ import type { HospitalResult, HospitalType } from '@/types';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const { height: SCREEN_H } = Dimensions.get('window');
-const MAP_HEIGHT            = SCREEN_H * 0.42;
-const DEFAULT_DELTA         = 0.08;
+const DEFAULT_DELTA = 0.08;
 
 const TYPE_COLORS: Record<string, string> = {
   phc:      '#1A6FA8',
@@ -392,6 +396,8 @@ const card = StyleSheet.create({
 
 export default function CareScreen() {
   const { t } = useTranslation();
+  const { height: screenH } = useWindowDimensions();
+  const mapSplitHeight = screenH * 0.42;
 
   const [viewMode, setViewMode]       = useState<'split' | 'map'>('split');
   const [activeTab, setActiveTab]     = useState<HospitalType | 'all'>('all');
@@ -464,10 +470,11 @@ export default function CareScreen() {
       lat:       userLoc!.lat,
       lng:       userLoc!.lng,
       type:      activeTab === 'all' ? undefined : activeTab,
-      radius_km: 25,
+      radius_km: 50,
     }),
     enabled:  !!userLoc,
     staleTime: 2 * 60 * 1000,
+    retry:    1,
   });
 
   const hospitals: HospitalResult[] = data?.results ?? [];
@@ -502,7 +509,9 @@ export default function CareScreen() {
   }, [selected?.id]);
 
   // ── Map area (platform-split) ─────────────────────────────────────────────
-  const mapAreaStyle = viewMode === 'map' ? styles.mapFull : styles.mapSplit;
+  const mapAreaStyle = viewMode === 'map'
+    ? styles.mapFull
+    : [styles.mapSplit, { height: mapSplitHeight }];
 
   const mapContent = !permGranted ? (
     <Animated.View entering={FadeInDown.duration(400)} style={styles.locPrompt}>
@@ -527,7 +536,7 @@ export default function CareScreen() {
     <MapView
       ref={mapRef}
       style={StyleSheet.absoluteFillObject}
-      provider={PROVIDER_DEFAULT}
+      provider={MAP_PROVIDER}
       showsUserLocation={false}
       showsMyLocationButton={false}
       showsCompass={true}
@@ -761,7 +770,7 @@ const styles = StyleSheet.create({
   tabText:  { fontSize: 12, fontWeight: '600', color: COLORS.textSub },
   tabTextActive:{ color: '#fff' },
 
-  mapSplit: { height: MAP_HEIGHT, overflow: 'hidden', backgroundColor: COLORS.parchmentWarm },
+  mapSplit: { overflow: 'hidden', backgroundColor: COLORS.parchmentWarm },
   mapFull:  { flex: 1, overflow: 'hidden', backgroundColor: COLORS.parchmentWarm },
 
   locPrompt:{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 12 },

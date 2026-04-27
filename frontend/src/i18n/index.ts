@@ -72,7 +72,7 @@ export async function initI18n(): Promise<void> {
       fallbackLng:    'en',
       defaultNS:      'translation',
       interpolation:  { escapeValue: false },
-      compatibilityJSON: 'v4',    // required for React Native
+      compatibilityJSON: 'v3',    // v4 requires Intl.PluralRules; Hermes lacks it
     });
 }
 

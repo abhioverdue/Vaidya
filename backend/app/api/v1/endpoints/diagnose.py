@@ -143,6 +143,58 @@ async def predict_multimodal(
             has_vision_result=vision_result is not None,
         )
 
+        # ── Stage 3b: Gemini Vision validation + enrichment ──────────────────
+        if image_tmp and vision_result and not vision_result.get("error"):
+            try:
+                from app.services.diagnosis.llm_fallback import (
+                    enrich_vision_with_gemini, validate_vision_with_gemini,
+                )
+
+                # Validation: only when CNN confidence is low (<60%) — high-confidence
+                # CNN predictions are trusted; low-confidence ones get a Gemini sanity check.
+                top_pred = vision_result.get("top_prediction", {})
+                cnn_conf = top_pred.get("confidence", 1.0) if isinstance(top_pred, dict) else 1.0
+
+                if cnn_conf < 0.60:
+                    vision_validation = await validate_vision_with_gemini(
+                        image_path=image_tmp,
+                        cnn_result=vision_result,
+                        symptoms=extracted.symptoms,
+                        language=language or "en",
+                    )
+                    if vision_validation and not vision_validation.get("agrees"):
+                        alt_label = vision_validation.get("alternative")
+                        if alt_label:
+                            # Override the CNN label — fusion will use corrected label
+                            # for VISION_CORROBORATION scoring.
+                            vision_result = dict(vision_result)
+                            vision_result["top_prediction"] = {
+                                **top_pred,
+                                "label":      alt_label,
+                                "confidence": cnn_conf,  # keep original conf; label corrected
+                                "gemini_override": True,
+                            }
+                            log.info(
+                                "vaidya.diagnose.vision_gemini_override",
+                                original=top_pred.get("label"), corrected=alt_label,
+                                cnn_conf=round(cnn_conf, 3),
+                                reasoning=vision_validation.get("reasoning", ""),
+                            )
+
+                # Enrichment: plain-language description (always runs when Gemini available)
+                gemini_vision_desc = await enrich_vision_with_gemini(
+                    image_path=image_tmp,
+                    cnn_result=vision_result,
+                    symptoms=extracted.symptoms,
+                    language=language or "en",
+                )
+                if gemini_vision_desc:
+                    vision_result = dict(vision_result)
+                    vision_result["gemini_description"] = gemini_vision_desc
+                    log.info("vaidya.diagnose.gemini_vision_ok", desc_len=len(gemini_vision_desc))
+            except Exception as exc:
+                log.warning("vaidya.diagnose.gemini_vision_failed", error=str(exc))
+
         # ── Stage 4: Fuse signals ─────────────────────────────────────────────
         diagnosis, fusion_weights = await fuse_signals(
             nlp_result=nlp_result,
@@ -162,7 +214,12 @@ async def predict_multimodal(
         )
 
         # ── Stage 5: Triage ───────────────────────────────────────────────────
-        pid = uuid.UUID(patient_id) if patient_id else None
+        pid = None
+        if patient_id:
+            try:
+                pid = uuid.UUID(patient_id)
+            except ValueError:
+                raise HTTPException(400, "patient_id must be a valid UUID")
         triage = await compute_triage(
             diagnosis=diagnosis,
             self_severity=self_severity,
@@ -190,8 +247,12 @@ async def predict_multimodal(
             triage_label=triage.label,
             completed_at=now,
         )
-        db.add(session)
-        await db.flush()
+        try:
+            db.add(session)
+            await db.flush()
+        except Exception as exc:
+            log.error("vaidya.diagnose.session_persist_failed", error=str(exc))
+            await db.rollback()
 
         return FullTriageResponse(
             session_id=session_id,
@@ -254,26 +315,30 @@ async def predict_text_only(
     )
 
     now = datetime.now(timezone.utc)
-    session = TriageSession(
-        id=session_id,
-        patient_id=payload.patient_id,
-        input_language=payload.language or "en",
-        raw_text=payload.text,
-        extracted_keywords=extracted.raw_keywords,
-        symptom_vector=symptom_vector,
-        duration_text=extracted.duration,
-        self_severity=payload.self_severity,
-        primary_diagnosis=diagnosis.primary_diagnosis,
-        differential_diagnosis=diagnosis.differential,
-        model_confidence=diagnosis.confidence,
-        diagnosis_source=diagnosis.diagnosis_source,
-        red_flags=diagnosis.red_flags,
-        triage_level=triage.level,
-        triage_label=triage.label,
-        completed_at=now,
-    )
-    db.add(session)
-    await db.flush()
+    try:
+        session = TriageSession(
+            id=session_id,
+            patient_id=payload.patient_id,
+            input_language=payload.language or "en",
+            raw_text=payload.text,
+            extracted_keywords=extracted.raw_keywords,
+            symptom_vector=symptom_vector,
+            duration_text=extracted.duration,
+            self_severity=payload.self_severity,
+            primary_diagnosis=diagnosis.primary_diagnosis,
+            differential_diagnosis=diagnosis.differential,
+            model_confidence=diagnosis.confidence,
+            diagnosis_source=diagnosis.diagnosis_source,
+            red_flags=diagnosis.red_flags,
+            triage_level=triage.level,
+            triage_label=triage.label,
+            completed_at=now,
+        )
+        db.add(session)
+        await db.flush()
+    except Exception as exc:
+        logger.error("vaidya.diagnose.session_persist_failed", error=str(exc))
+        await db.rollback()
 
     return FullTriageResponse(
         session_id=session_id,
@@ -286,4 +351,48 @@ async def predict_text_only(
         fusion_weights=fusion_weights,
         created_at=now,
     )
+
+
+# ── POST /audio — cough detection only ───────────────────────────────────────
+
+@router.post("/audio", summary="Cough detection — audio file only, no full triage")
+async def predict_audio_only(
+    audio_file: UploadFile = File(..., description="Respiratory audio (wav/ogg/mp3)"),
+):
+    """
+    Lightweight endpoint: accepts an audio file, runs the cough classification
+    model, and returns the result immediately. No symptom extraction, no DB write.
+    Used by the frontend to show a real-time 'Cough Detected' popup after recording.
+    """
+    from app.services.diagnosis.audio_model import run_audio_model
+
+    content = await audio_file.read()
+    if len(content) > MAX_AUDIO_BYTES:
+        raise HTTPException(413, "Audio file too large (max 15MB)")
+
+    audio_tmp = _write_tmp(content, ".wav")
+    try:
+        result = await run_audio_model(audio_tmp)
+    finally:
+        _cleanup(audio_tmp)
+
+    if "error" in result:
+        raise HTTPException(503, result["error"])
+
+    top    = result.get("top_prediction", {})
+    label  = top.get("label", "other")
+    conf   = top.get("confidence", 0.0)
+
+    severity: str | None = None
+    if label == "cough_severe":
+        severity = "severe"
+    elif label == "cough_healthy":
+        severity = "mild"
+
+    return {
+        "detected":   label != "other",
+        "label":      label,
+        "confidence": round(conf, 4),
+        "severity":   severity,
+    }
 

@@ -50,9 +50,9 @@ class Settings(BaseSettings):
 
     # ── Gemini (LLM) ─────────────────────────────────────────────────────────────
     GEMINI_API_KEY: str = ""            # Google AI Studio key — free tier: 15 RPM
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_TIMEOUT: int = 30            # seconds
-    WHISPER_MODEL: str = "openai/whisper-tiny"
+    WHISPER_MODEL: str = "tiny"   # faster-whisper size: tiny|base|small|medium|large-v3
     # DEPRECATED — Ollama fully replaced by Gemini. These settings are retained
     # only so that any operator .env files with OLLAMA_* vars don't cause startup
     # errors (pydantic-settings extra="ignore" handles unknown keys, but explicit
@@ -84,6 +84,8 @@ class Settings(BaseSettings):
     ESANJEEVANI_BASE_URL: str = "https://esanjeevaniopd.in/api"
     OVERPASS_API_URL: str = "https://overpass-api.de/api/interpreter"
     NOMINATIM_URL: str = "https://nominatim.openstreetmap.org"
+    # Google Maps API key — same key as frontend (app.json). Needs Places API enabled.
+    GOOGLE_MAPS_API_KEY: str = "AIzaSyCDzqroisSBOKa86sJUIRoB-4Mjlwk0_l0"
 
     # ── Notifications (FCM HTTP v1 API — replaces deprecated Legacy Server Key) ─────
     # The Legacy FCM Server Key (AAAAxxx) was shut down June 2024.
@@ -94,6 +96,15 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str = ""               # Twilio SMS (free trial)
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_FROM_NUMBER: str = ""
+
+    # Fast2SMS — free Indian SMS gateway for OTP delivery
+    # Get key at: https://www.fast2sms.com/ → API → Dev API
+    FAST2SMS_API_KEY: str = ""
+
+    # Firebase Admin SDK — base64-encoded service account JSON
+    # Generate at: Firebase Console → Project Settings → Service Accounts → Generate new private key
+    # Then base64-encode: base64 -i serviceAccount.json
+    FIREBASE_SERVICE_ACCOUNT_JSON: str = ""
 
     # ── ABDM (Ayushman Bharat Digital Mission) ───────────────────────────────────
     ABDM_BASE_URL: str = "https://sandbox.abdm.gov.in/api/v3"

@@ -69,8 +69,9 @@ async def get_current_user_id(
 
 async def rate_limit(request: Request, redis=Depends(get_redis)) -> None:
     """60 requests/minute per IP — stored as Redis sorted set.
-    Skips silently when Redis is unavailable (no Redis on ECS)."""
-    if redis is None:
+    Skips silently when Redis is unavailable (NullRedis or None)."""
+    from app.core.redis import is_null_redis
+    if redis is None or is_null_redis(redis):
         return
 
     from redis.exceptions import ConnectionError as RedisConnectionError, RedisError

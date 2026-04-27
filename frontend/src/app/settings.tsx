@@ -72,11 +72,8 @@ const row = StyleSheet.create({
 
 // ── ProfileCard ───────────────────────────────────────────────────────────────
 
-function ProfileCard({ name, phone }: { name: string; phone: string }) {
+function ProfileCard({ name, email }: { name: string; email: string }) {
   const initial = name ? name.charAt(0).toUpperCase() : '?';
-  const maskedPhone = phone.length >= 4
-    ? `+91 ••••${phone.slice(-4)}`
-    : phone;
 
   return (
     <View style={pc.card}>
@@ -85,7 +82,7 @@ function ProfileCard({ name, phone }: { name: string; phone: string }) {
       </View>
       <View style={pc.info}>
         <Text style={pc.name}>{name || 'Your Name'}</Text>
-        <Text style={pc.phone}>{maskedPhone || '+91 ••••••••••'}</Text>
+        <Text style={pc.phone}>{email || 'No email set'}</Text>
       </View>
       <View style={pc.badge}>
         <View style={pc.badgeDot} />
@@ -161,7 +158,7 @@ export default function SettingsScreen() {
         {/* Profile card */}
         <Animated.View entering={FadeInDown.duration(400)}>
           <Text style={styles.sectionLabel}>PROFILE</Text>
-          <ProfileCard name={user?.name ?? ''} phone={user?.phone ?? ''} />
+          <ProfileCard name={user?.name ?? ''} email={user?.email ?? ''} />
         </Animated.View>
 
         {/* Language */}
@@ -191,13 +188,13 @@ export default function SettingsScreen() {
             <Row
               icon="✨"
               label="Gemini AI (Online)"
-              sub={store.isOnline ? 'Active · gemini-1.5-flash' : 'Unavailable — offline'}
+              sub={store.isOnline ? 'Active · gemini-2.0-flash' : 'Unavailable — offline'}
               isLast={false}
               onPress={() => {
                 Haptics.selectionAsync();
                 Alert.alert(
                   'Gemini AI Model',
-                  `Model: gemini-1.5-flash\nProvider: Google DeepMind\nStatus: ${store.isOnline ? 'Connected' : 'Unavailable'}\n\nThis model powers online symptom analysis with multi-language support and reasoning.`,
+                  `Model: gemini-2.0-flash\nProvider: Google DeepMind\nStatus: ${store.isOnline ? 'Connected' : 'Unavailable'}\n\nThis model powers online symptom analysis with multi-language support and reasoning.`,
                 );
               }}
               rightEl={
@@ -271,12 +268,12 @@ export default function SettingsScreen() {
               isLast={false}
             />
             <Row
-              icon="📞"
-              label="Update mobile number"
-              sub={user?.phone ? `+91 ${user.phone}` : 'Not set'}
+              icon="✉️"
+              label="Account email"
+              sub={user?.email ?? 'Not set'}
               onPress={() => {
                 Haptics.selectionAsync();
-                Alert.alert('Update mobile', 'Contact support to update your registered mobile number.');
+                Alert.alert('Account email', 'Contact support to update your registered email address.');
               }}
               isLast={false}
             />
@@ -303,7 +300,7 @@ export default function SettingsScreen() {
                 Haptics.selectionAsync();
                 Alert.alert(
                   'About Vaidya v1.0.0',
-                  'Vaidya is an AI-powered health triage tool built for ASHA workers and rural communities across India.\n\nStack: React Native · Expo · Gemini 1.5 Flash · XGBoost · TFLite\n\nBuilt for Google Solutions Challenge.',
+                  'Vaidya is an AI-powered health triage tool built for ASHA workers and rural communities across India.\n\nStack: React Native · Expo · Gemini 2.0 Flash · XGBoost · TFLite\n\nBuilt for Google Solutions Challenge.',
                 );
               }}
             />
@@ -344,7 +341,7 @@ export default function SettingsScreen() {
         </Animated.View>
 
         <Text style={styles.footer}>
-          Vaidya · Gemini 1.5 Flash · XGBoost · TFLite{'\n'}
+          Vaidya · Gemini 2.0 Flash · XGBoost · TFLite{'\n'}
           Built for ASHA workers & rural communities of India
         </Text>
       </ScrollView>

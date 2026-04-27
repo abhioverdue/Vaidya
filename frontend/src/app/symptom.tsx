@@ -5,7 +5,7 @@
 
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Alert, Pressable, Image,
+  StyleSheet, Alert, Pressable, Image, ActivityIndicator, Modal,
 } from 'react-native';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { router } from 'expo-router';
@@ -15,7 +15,7 @@ import Animated, {
   FadeInDown, FadeIn,
   useAnimatedStyle, useSharedValue,
   withRepeat, withTiming, withSequence, withSpring, withDelay,
-  interpolate, Easing,
+  interpolate, Easing, cancelAnimation,
 } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
@@ -23,8 +23,9 @@ import * as Haptics from 'expo-haptics';
 
 import { useAppStore } from '@/store';
 import { useTriage } from '@/hooks/useTriage';
-import { submitVoice } from '@/services/api';
+import { submitVoice, analyzeCoughAudio, type CoughResult } from '@/services/api';
 import { COLORS, QUICK_SYMPTOMS, TYPE, RADIUS } from '@/constants';
+import { scale, vScale } from '@/utils/responsive';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { StatusIndicator } from '@/components/ui/StatusIndicator';
@@ -32,7 +33,6 @@ import { PillBadge } from '@/components/ui/PillBadge';
 import type { Language } from '@/types';
 
 const DURATIONS = ['Today', '2–3 days', '1 week', 'Longer'] as const;
-type DurationLabel = typeof DURATIONS[number];
 
 // ── RecordingWaveBar ──────────────────────────────────────────────────────────
 
@@ -56,6 +56,7 @@ function RecordingWaveBar({ isActive, index }: { isActive: boolean; index: numbe
     } else {
       height.value = withSpring(4, { damping: 15, stiffness: 200 });
     }
+    return () => cancelAnimation(height);
   }, [isActive]);
 
   const style = useAnimatedStyle(() => ({ height: height.value }));
@@ -93,7 +94,7 @@ const wv = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    height: 44,
+    height: vScale(44),
     paddingHorizontal: 4,
   },
 });
@@ -127,27 +128,6 @@ function SymptomChip({ label, active, onPress }: { label: string; active: boolea
   );
 }
 
-// ── ImagePreviewCard ──────────────────────────────────────────────────────────
-
-function ImagePreviewCard({ uri, task, onRemove }: { uri: string; task?: string; onRemove: () => void }) {
-  return (
-    <Animated.View entering={FadeInDown.duration(300)} style={s.imagePreviewCard}>
-      <Image source={{ uri }} style={s.imageThumb} resizeMode="cover" />
-      <View style={s.imagePreviewInfo}>
-        <Text style={s.imagePreviewTitle}>Image attached</Text>
-        {task && (
-          <Text style={s.imagePreviewSub}>
-            {task === 'chest' ? 'Chest X-ray' : task === 'skin' ? 'Skin condition' : 'Wound / injury'}
-          </Text>
-        )}
-      </View>
-      <TouchableOpacity onPress={onRemove} style={s.imageRemoveBtn}>
-        <Text style={s.imageRemoveText}>×</Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-}
-
 // ── SymptomScreen ─────────────────────────────────────────────────────────────
 
 export default function SymptomScreen() {
@@ -156,11 +136,19 @@ export default function SymptomScreen() {
   const { runTriage } = useTriage();
 
   const [isRecording, setIsRecording]         = useState(false);
+  const [isTranscribing, setIsTranscribing]   = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [selectedChips, setSelectedChips]     = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced]       = useState(false);
   const [showImageTaskModal, setShowImageTaskModal] = useState(false);
+  const [coughResult, setCoughResult]         = useState<CoughResult | null>(null);
+  const [showCoughPopup, setShowCoughPopup]   = useState(false);
+  const coughDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recordingRef = useRef<Audio.Recording | null>(null);
+
+  useEffect(() => {
+    return () => { if (coughDismissTimer.current) clearTimeout(coughDismissTimer.current); };
+  }, []);
 
   const lang  = store.language as Language;
   const chips = QUICK_SYMPTOMS[lang];
@@ -190,6 +178,7 @@ export default function SymptomScreen() {
     } else {
       submitGlow.value = withTiming(0);
     }
+    return () => cancelAnimation(submitGlow);
   }, [canSubmit]);
 
   const submitScale = useSharedValue(1);
@@ -243,15 +232,34 @@ export default function SymptomScreen() {
     recordingRef.current = null;
     if (!uri) return;
     store.setAudioUri(uri);
+
     if (store.isOnline) {
-      try {
-        const result = await submitVoice(uri, lang);
-        const { transcript } = result;
-        setVoiceTranscript(transcript);
-        store.setSymptomText(store.symptomText ? `${store.symptomText}. ${transcript}` : transcript);
-      } catch { /* silent — user still has text input */ }
+      // Transcription and cough detection run concurrently
+      setIsTranscribing(true);
+      const [transcriptResult] = await Promise.allSettled([
+        submitVoice(uri, lang),
+        analyzeCoughAudio(uri).then((res) => {
+          if (res.detected) {
+            setCoughResult(res);
+            setShowCoughPopup(true);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            if (coughDismissTimer.current) clearTimeout(coughDismissTimer.current);
+            coughDismissTimer.current = setTimeout(() => setShowCoughPopup(false), 4500);
+          }
+        }).catch(() => {}),
+      ]);
+      if (transcriptResult.status === 'fulfilled') {
+        const r = transcriptResult.value;
+        setVoiceTranscript(r.transcript);
+        store.setSymptomText(
+          store.symptomText ? `${store.symptomText}. ${r.transcript}` : r.transcript,
+        );
+      }
+      setIsTranscribing(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
   function pickImage() {
@@ -289,7 +297,7 @@ export default function SymptomScreen() {
   }
 
   function handleSubmit() {
-    const text = store.symptomText.trim();
+    const text = store.symptomText.trim() || selectedChips.join(', ');
     if (!text) return;
     runTriage(text);
   }
@@ -342,28 +350,40 @@ export default function SymptomScreen() {
             <TouchableOpacity
               onPress={isRecording ? stopRecording : startRecording}
               activeOpacity={0.85}
+              disabled={isTranscribing}
             >
-              <View style={[s.micOuter, isRecording && s.micOuterActive]}>
+              <View style={[s.micOuter, isRecording && s.micOuterActive, isTranscribing && s.micOuterTranscribing]}>
                 <View style={[s.micBtn, isRecording && s.micBtnActive]}>
-                  {isRecording
-                    ? <View style={s.stopIcon} />
-                    : <View style={s.micIcon}>
-                        <View style={s.micIconBody} />
-                        <View style={s.micIconStand} />
-                        <View style={s.micIconBase} />
-                      </View>
+                  {isTranscribing
+                    ? <ActivityIndicator size="small" color={COLORS.sage} />
+                    : isRecording
+                      ? <View style={s.stopIcon} />
+                      : <View style={s.micIcon}>
+                          <View style={s.micIconBody} />
+                          <View style={s.micIconStand} />
+                          <View style={s.micIconBase} />
+                        </View>
                   }
                 </View>
               </View>
             </TouchableOpacity>
 
             <View style={s.micMeta}>
-              <Text style={isRecording ? s.recordingLabel : s.voiceHint}>
-                {isRecording ? 'Recording — tap to stop' : 'Tap to record'}
-              </Text>
-              <Text style={s.voiceSubHint}>
-                {isRecording ? `Listening in ${lang.toUpperCase()}…` : 'English · Hindi · Tamil'}
-              </Text>
+              {isTranscribing ? (
+                <>
+                  <Text style={s.transcribingLabel}>Transcribing…</Text>
+                  <Text style={s.voiceSubHint}>Processing your voice</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={isRecording ? s.recordingLabel : s.voiceHint}>
+                    {isRecording ? 'Recording — tap to stop' : 'Tap to record'}
+                  </Text>
+                  <Text style={s.voiceSubHint}>
+                    {isRecording ? `Listening in ${lang.toUpperCase()}…` : 'English · Hindi · Tamil'}
+                  </Text>
+                </>
+              )}
             </View>
           </View>
 
@@ -383,11 +403,6 @@ export default function SymptomScreen() {
         <Animated.View entering={FadeInDown.duration(380).delay(55)} style={s.textCard}>
           <View style={s.textCardTop}>
             <Text style={s.sectionLabel}>{t('symptom.screen_title').toUpperCase()}</Text>
-            <TouchableOpacity onPress={pickImage} style={s.cameraChip}>
-              <Text style={s.cameraChipText}>
-                {store.imageUri ? '✓ Photo' : '+ Photo'}
-              </Text>
-            </TouchableOpacity>
           </View>
 
           <TextInput
@@ -406,16 +421,45 @@ export default function SymptomScreen() {
               <Text style={s.clearBtn}>Clear text</Text>
             </TouchableOpacity>
           )}
-        </Animated.View>
 
-        {/* ── Image preview ──────────────────────────────────────────── */}
-        {store.imageUri && (
-          <ImagePreviewCard
-            uri={store.imageUri}
-            task={store.imageTask ?? undefined}
-            onRemove={() => store.setImageUri(null)}
-          />
-        )}
+          {/* ── Full-width image picker ─────────────────────────────── */}
+          <View style={s.imagePickerRow}>
+            <TouchableOpacity
+              onPress={pickImage}
+              style={[s.imagePickerBtn, !!store.imageUri && s.imagePickerBtnAttached]}
+              activeOpacity={0.8}
+            >
+              {store.imageUri ? (
+                <Image source={{ uri: store.imageUri }} style={s.imagePickerThumb} resizeMode="cover" />
+              ) : (
+                <Text style={s.imagePickerBtnIcon}>⊕</Text>
+              )}
+              <View style={s.imagePickerBtnBody}>
+                <Text style={[s.imagePickerBtnLabel, !!store.imageUri && s.imagePickerBtnLabelOn]}>
+                  {store.imageUri
+                    ? (store.imageTask === 'chest' ? 'Chest X-ray attached'
+                      : store.imageTask === 'skin' ? 'Skin photo attached'
+                      : store.imageTask === 'wound' ? 'Wound photo attached'
+                      : t('symptom.image_added'))
+                    : t('symptom.add_image')}
+                </Text>
+                {!store.imageUri && (
+                  <Text style={s.imagePickerBtnSub}>{t('symptom.image_optional')}</Text>
+                )}
+              </View>
+              {!store.imageUri && <Text style={s.imagePickerBtnArrow}>→</Text>}
+            </TouchableOpacity>
+            {!!store.imageUri && (
+              <TouchableOpacity
+                onPress={() => { store.setImageUri(null); store.setImageTask(null); }}
+                style={s.imagePickerRemoveBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={s.imagePickerRemoveText}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </Animated.View>
 
         {/* ── Common symptom chips ───────────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(380).delay(110)}>
@@ -424,7 +468,7 @@ export default function SymptomScreen() {
             badge={selectedChips.length > 0 ? selectedChips.length : undefined}
           />
           <View style={s.chips}>
-            {chips.map((chip, i) => (
+            {chips.map((chip) => (
               <SymptomChip
                 key={chip}
                 label={chip}
@@ -510,45 +554,81 @@ export default function SymptomScreen() {
           )}
         </Animated.View>
 
-        <View style={{ height: 130 }} />
+        <View style={{ height: vScale(130) }} />
       </ScrollView>
 
       {/* ── Floating submit dock ──────────────────────────────────────── */}
       <View style={s.submitDock}>
-        <Animated.View style={[s.submitBtnWrap, submitAnimStyle]}>
-          {/* ── Symptom count warning ──────────────────────────────── */}
-          {canSubmit && (
-            <View style={[
-              s.symptomWarn,
-              symptomCount >= 4 && s.symptomWarnOk,
-            ]}>
-              <Text style={[s.symptomWarnIcon, symptomCount >= 4 && s.symptomWarnIconOk]}>
-                {symptomCount >= 4 ? '✓' : '⚠'}
-              </Text>
-              <Text style={[s.symptomWarnText, symptomCount >= 4 && s.symptomWarnTextOk]}>
-                {symptomCount >= 4
-                  ? `${symptomCount} symptoms described — good detail`
-                  : `Describe at least 4 symptoms for accurate results (${symptomCount} so far)`}
-              </Text>
-            </View>
-          )}
-
-          <Pressable
-            style={[s.submitBtn, !canSubmit && s.submitBtnDisabled]}
-            onPress={handleSubmit}
-            onPressIn={() => { submitScale.value = withSpring(0.97, { damping: 20, stiffness: 300 }); }}
-            onPressOut={() => { submitScale.value = withSpring(1,    { damping: 20, stiffness: 300 }); }}
-            disabled={!canSubmit}
-          >
-            <Text style={s.submitText}>
-              {store.isAnalysing ? t('analysis.screen_title') : `${t('symptom.analyze_btn')} →`}
+        {/* ── Symptom count warning (outside animated wrapper) ─────── */}
+        {canSubmit && (
+          <View style={[s.symptomWarn, symptomCount >= 4 && s.symptomWarnOk]}>
+            <Text style={[s.symptomWarnIcon, symptomCount >= 4 && s.symptomWarnIconOk]}>
+              {symptomCount >= 4 ? '✓' : '⚠'}
             </Text>
-          </Pressable>
-        </Animated.View>
+            <Text style={[s.symptomWarnText, symptomCount >= 4 && s.symptomWarnTextOk]}>
+              {symptomCount >= 4
+                ? `${symptomCount} symptoms — good detail`
+                : `Add ${4 - symptomCount} more symptom${4 - symptomCount === 1 ? '' : 's'} for accurate results`}
+            </Text>
+          </View>
+        )}
+
+          <Animated.View style={[s.submitBtnWrap, submitAnimStyle]}>
+            <Pressable
+              style={[s.submitBtn, (!canSubmit || store.isAnalysing) && s.submitBtnDisabled]}
+              onPress={handleSubmit}
+              onPressIn={() => { submitScale.value = withSpring(0.97, { damping: 20, stiffness: 300 }); }}
+              onPressOut={() => { submitScale.value = withSpring(1,    { damping: 20, stiffness: 300 }); }}
+              disabled={!canSubmit || store.isAnalysing}
+            >
+              <Text style={s.submitText}>
+                {store.isAnalysing ? t('analysis.screen_title') : `${t('symptom.analyze_btn')} →`}
+              </Text>
+            </Pressable>
+          </Animated.View>
         <Text style={s.submitHint}>
-          {store.isOnline ? 'Gemini AI · XGBoost · 133 conditions' : t('analysis.offline_note')}
+          {store.isOnline ? 'Gemini AI · XGBoost · 132 conditions' : t('analysis.offline_note')}
         </Text>
       </View>
+
+      {/* ── Cough Detected popup ─────────────────────────────────────── */}
+      <Modal
+        visible={showCoughPopup}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => setShowCoughPopup(false)}
+      >
+        <Pressable style={s.coughOverlay} onPress={() => setShowCoughPopup(false)}>
+          <Animated.View entering={FadeInDown.duration(320).springify()} style={s.coughCard}>
+            <View style={s.coughHandle} />
+            <Text style={s.coughIcon}>🫁</Text>
+            <Text style={s.coughTitle}>Cough Detected</Text>
+            <View style={[
+              s.coughBadge,
+              coughResult?.severity === 'severe' ? s.coughBadgeSevere : s.coughBadgeMild,
+            ]}>
+              <Text style={[
+                s.coughBadgeText,
+                coughResult?.severity === 'severe' ? s.coughBadgeTextSevere : s.coughBadgeTextMild,
+              ]}>
+                {coughResult?.severity === 'severe' ? '⚠ Severe respiratory pattern' : '✓ Healthy cough pattern'}
+              </Text>
+            </View>
+            <Text style={s.coughSub}>
+              {coughResult?.severity === 'severe'
+                ? 'Elevated risk flagged — factored into your diagnosis'
+                : 'No respiratory distress detected — factored into your diagnosis'}
+            </Text>
+            <TouchableOpacity
+              style={s.coughOkBtn}
+              onPress={() => setShowCoughPopup(false)}
+            >
+              <Text style={s.coughOkText}>OK</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </Pressable>
+      </Modal>
 
       {/* ── Image task modal ──────────────────────────────────────────── */}
       {showImageTaskModal && (
@@ -634,14 +714,14 @@ const s = StyleSheet.create({
 
   micCenter:      { alignItems: 'center', gap: 12 },
   micOuter:       {
-    width: 92, height: 92, borderRadius: 46,
+    width: scale(92), height: scale(92), borderRadius: scale(46),
     borderWidth: 1.5, borderColor: COLORS.borderMid,
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: COLORS.parchmentWarm,
   },
   micOuterActive: { borderColor: COLORS.crimson, backgroundColor: 'rgba(194,59,34,0.06)' },
   micBtn:         {
-    width: 72, height: 72, borderRadius: 36,
+    width: scale(72), height: scale(72), borderRadius: scale(36),
     backgroundColor: COLORS.parchment,
     borderWidth: 1, borderColor: COLORS.border,
     alignItems: 'center', justifyContent: 'center',
@@ -656,8 +736,10 @@ const s = StyleSheet.create({
 
   stopIcon:   { width: 16, height: 16, borderRadius: 3, backgroundColor: '#fff' },
 
+  micOuterTranscribing: { borderColor: COLORS.sage, backgroundColor: 'rgba(58,95,82,0.06)' },
   micMeta:        { alignItems: 'center', gap: 3 },
   recordingLabel: { ...TYPE.titleMed, color: COLORS.crimson },
+  transcribingLabel: { ...TYPE.titleMed, color: COLORS.sage },
   voiceHint:      { ...TYPE.titleMed, color: COLORS.textSub },
   voiceSubHint:   { ...TYPE.micro, color: COLORS.textFaint },
 
@@ -687,26 +769,24 @@ const s = StyleSheet.create({
   clearRow: { alignItems: 'flex-end' },
   clearBtn: { ...TYPE.bodySmall, color: COLORS.textMuted },
 
-  cameraChip:     { backgroundColor: COLORS.sageGhost, borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 5, borderWidth: 1, borderColor: 'rgba(58,95,82,0.2)' },
-  cameraChipText: { ...TYPE.micro, color: COLORS.sage, fontWeight: '700' },
-
-  // Image preview
-  imagePreviewCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  // Full-width image picker
+  imagePickerRow:         { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  imagePickerBtn:         {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: COLORS.parchment,
+    borderRadius: RADIUS.lg, borderWidth: 1.5, borderColor: COLORS.border,
+    paddingVertical: 13, paddingHorizontal: 14,
   },
-  imageThumb:        { width: 56, height: 56, borderRadius: RADIUS.md, backgroundColor: COLORS.parchmentWarm },
-  imagePreviewInfo:  { flex: 1, gap: 3 },
-  imagePreviewTitle: { ...TYPE.titleMed, color: COLORS.ink },
-  imagePreviewSub:   { ...TYPE.micro, color: COLORS.textMuted },
-  imageRemoveBtn:    { width: 30, height: 30, borderRadius: 15, backgroundColor: COLORS.inkGhost, alignItems: 'center', justifyContent: 'center' },
-  imageRemoveText:   { fontSize: 18, color: COLORS.textMuted, fontWeight: '400', lineHeight: 20 },
+  imagePickerBtnAttached: { borderColor: COLORS.sage, backgroundColor: COLORS.sageGhost },
+  imagePickerBtnIcon:     { fontSize: 22, color: COLORS.textMuted, width: 28, textAlign: 'center' },
+  imagePickerThumb:       { width: 36, height: 36, borderRadius: RADIUS.md },
+  imagePickerBtnBody:     { flex: 1, gap: 2 },
+  imagePickerBtnLabel:    { ...TYPE.bodySmall, color: COLORS.textSub, fontWeight: '600' },
+  imagePickerBtnLabelOn:  { color: COLORS.sage },
+  imagePickerBtnSub:      { ...TYPE.micro, color: COLORS.textFaint },
+  imagePickerBtnArrow:    { fontSize: 16, color: COLORS.textFaint },
+  imagePickerRemoveBtn:   { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.inkGhost, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.borderMid },
+  imagePickerRemoveText:  { fontSize: 16, color: COLORS.textMuted },
 
   // Chips
   chips:          { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
@@ -798,4 +878,25 @@ const s = StyleSheet.create({
   modalOptionArrow: { fontSize: 20, color: COLORS.textFaint, fontWeight: '300' },
   modalCancel:      { marginTop: 8, paddingVertical: 14, alignItems: 'center' },
   modalCancelText:  { ...TYPE.bodySmall, color: COLORS.textMuted, fontWeight: '600' },
+
+  // Cough popup
+  coughOverlay:          { flex: 1, backgroundColor: 'rgba(15,17,23,0.6)', justifyContent: 'flex-end' },
+  coughCard:             {
+    backgroundColor: COLORS.parchment,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 28, paddingTop: 16, paddingBottom: 44,
+    alignItems: 'center', gap: 10,
+  },
+  coughHandle:           { width: 36, height: 4, borderRadius: 2, backgroundColor: COLORS.borderMid, marginBottom: 6 },
+  coughIcon:             { fontSize: 48, marginBottom: 2 },
+  coughTitle:            { ...TYPE.headlineMed, color: COLORS.ink, textAlign: 'center' },
+  coughBadge:            { borderRadius: RADIUS.pill, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1.5 },
+  coughBadgeSevere:      { backgroundColor: 'rgba(194,59,34,0.08)', borderColor: 'rgba(194,59,34,0.35)' },
+  coughBadgeMild:        { backgroundColor: 'rgba(58,95,82,0.08)',  borderColor: 'rgba(58,95,82,0.35)' },
+  coughBadgeText:        { ...TYPE.bodySmall, fontWeight: '700' },
+  coughBadgeTextSevere:  { color: COLORS.crimson },
+  coughBadgeTextMild:    { color: COLORS.sage },
+  coughSub:              { ...TYPE.bodySmall, color: COLORS.textMuted, textAlign: 'center', lineHeight: 20, paddingHorizontal: 12 },
+  coughOkBtn:            { marginTop: 6, backgroundColor: COLORS.ink, borderRadius: RADIUS.xl, paddingVertical: 14, paddingHorizontal: 48 },
+  coughOkText:           { ...TYPE.titleMed, color: '#fff', letterSpacing: 0.3 },
 });

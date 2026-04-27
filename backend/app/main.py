@@ -51,6 +51,11 @@ async def lifespan(app: FastAPI):
         logger.warning("vaidya.models.nlp_missing",
                        hint="place final_nlp_model.pkl, label_encoder.pkl, final_symptom_list.pkl in models/nlp/")
 
+    # Pre-warm Whisper so first voice request doesn't pay model load cost (~2s)
+    from app.services.nlp.transcriber import _load_whisper
+    _load_whisper()
+    logger.info("vaidya.models.whisper_ready")
+
     yield
 
     # Teardown

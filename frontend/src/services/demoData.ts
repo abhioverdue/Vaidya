@@ -255,20 +255,23 @@ export const DEMO_VOICE_RESPONSE: VoiceInputResponse = {
 /** Returns true for errors that mean "backend not reachable at all" */
 export function isNetworkUnreachable(err: unknown): boolean {
   if (!err) return false;
-  const msg = String((err as any)?.message ?? '').toLowerCase();
-  const code = String((err as any)?.code ?? '').toLowerCase();
-  // axios wraps the native error; check both the axios message and the
-  // underlying cause's code so this works on iOS, Android, and web
+  const msg      = String((err as any)?.message  ?? '').toLowerCase();
+  const code     = String((err as any)?.code     ?? '').toLowerCase();
   const causeMsg = String((err as any)?.cause?.message ?? '').toLowerCase();
   return (
     msg.includes('network request failed') ||
     msg.includes('econnrefused') ||
     msg.includes('failed to fetch') ||
     msg.includes('network error') ||
+    msg.includes('timeout') ||
     causeMsg.includes('econnrefused') ||
+    causeMsg.includes('network') ||
     code === 'econnrefused' ||
     code === 'enotfound' ||
-    code === 'network_error'
+    code === 'network_error' ||
+    code === 'err_network' ||       // axios on Android
+    code === 'econnaborted' ||      // axios request timeout
+    code === 'etimedout'
   );
 }
 

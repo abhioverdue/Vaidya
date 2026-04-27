@@ -14,7 +14,7 @@ ABSOLUTE RULES — never violate these:
   - If symptoms are vague or insufficient, say so in reasoning and set confidence ≤ 0.35.
   - Always include the disclaimer field verbatim.
   - Red flags must be specific and actionable — not generic warnings.
-  - Differential must contain at least 2 alternatives unless presentation is pathognomonic.
+  - Differential must contain exactly 3 alternatives — use lower confidence values for less likely conditions rather than omitting them.
 
 TRIAGE LEVEL GUIDE — assign one of these:
   1 = Self-care at home (mild, non-concerning)

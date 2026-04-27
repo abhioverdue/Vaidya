@@ -1,7 +1,7 @@
 /**
  * Vaidya — Reset Password screen
- * Phase 1: Enter mobile → send OTP → go to verify-otp
- * Phase 2: (returned from verify-otp with pendingReg.type==='reset') Enter new password
+ * Logged-out: enter email → Firebase sends password reset link
+ * Logged-in: enter current password + new password
  */
 
 import {
@@ -19,7 +19,7 @@ import { useState, useRef, useCallback } from 'react';
 import * as Haptics from 'expo-haptics';
 
 import { useAppStore } from '@/store';
-import { authRequestOtp, authResetPassword } from '@/services/auth';
+import { authSendPasswordReset, authChangePassword } from '@/services/auth';
 import { COLORS, TYPE, RADIUS } from '@/constants';
 
 // ── FloatingLabelInput ────────────────────────────────────────────────────────
@@ -102,34 +102,36 @@ const fi = StyleSheet.create({
 // ── ResetPasswordScreen ───────────────────────────────────────────────────────
 
 export default function ResetPasswordScreen() {
-  const { pendingReg, setPendingReg } = useAppStore();
+  const { user } = useAppStore();
 
-  // Phase 2: user came back from OTP verify with type==='reset'
-  const isPhase2 = pendingReg?.type === 'reset' &&
-    // Only phase 2 if OTP was already verified (we mark this by keeping pendingReg after verify)
-    Boolean(pendingReg?.phone);
+  // If user is already signed in → real Firebase change-password flow
+  const isLoggedIn = !!user;
 
-  // Phase 1 state
-  const [phone,   setPhone]   = useState(pendingReg?.phone ?? '');
+  // Forgot-password state
+  const [email,   setEmail]   = useState('');
   const [loading, setLoading] = useState(false);
   const [errors,  setErrors]  = useState<Record<string, string>>({});
 
-  // Phase 2 state
+  // Logged-in change-password state
+  const [currentPass, setCurrentPass] = useState('');
+
+  // Phase 2 / logged-in new password state
   const [newPass,    setNewPass]    = useState('');
   const [confirmPass,setConfirmPass]= useState('');
   const [showPass,   setShowPass]   = useState(false);
   const [success,    setSuccess]    = useState(false);
 
-  const confirmRef = useRef<TextInput>(null);
+  const newPassRef  = useRef<TextInput>(null);
+  const confirmRef  = useRef<TextInput>(null);
 
   const btnScale = useSharedValue(1);
   const btnStyle = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
 
-  // ── Phase 1: send OTP ──────────────────────────────────────────────────────
-  async function handleSendOtp() {
+  // ── Forgot-password: send Firebase reset email ────────────────────────────
+  async function handleSendReset() {
     const e: Record<string, string> = {};
-    if (!phone.trim())                        e.phone = 'Enter your mobile number';
-    else if (!/^\d{10}$/.test(phone.trim()))  e.phone = 'Enter a valid 10-digit number';
+    if (!email.trim())                                              e.email = 'Enter your email address';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))     e.email = 'Enter a valid email address';
     if (Object.keys(e).length) {
       setErrors(e);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -138,12 +140,11 @@ export default function ResetPasswordScreen() {
     setLoading(true);
     setErrors({});
     try {
-      await authRequestOtp(phone.trim(), 'reset');
-      setPendingReg({ name: '', phone: phone.trim(), password: '', type: 'reset' });
+      await authSendPasswordReset(email.trim());
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.push('/verify-otp');
+      setSuccess(true);
     } catch (err: any) {
-      const msg = err?.response?.data?.detail ?? err?.message ?? 'Could not send OTP.';
+      const msg = err?.message ?? 'Could not send reset email. Please try again.';
       setErrors({ general: String(msg) });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
@@ -151,34 +152,24 @@ export default function ResetPasswordScreen() {
     }
   }
 
-  // ── Phase 2: set new password ──────────────────────────────────────────────
-  async function handleSetPassword() {
+  // ── Logged-in: real Firebase password change ───────────────────────────────
+  async function handleChangePassword() {
     const e: Record<string, string> = {};
-    if (!newPass)               e.newPass     = 'Enter a new password';
-    else if (newPass.length < 6) e.newPass    = 'Password must be at least 6 characters';
-    if (!confirmPass)            e.confirmPass = 'Confirm your new password';
+    if (!currentPass)                e.currentPass  = 'Enter your current password';
+    if (!newPass)                    e.newPass      = 'Enter a new password';
+    else if (newPass.length < 6)     e.newPass      = 'Password must be at least 6 characters';
+    if (!confirmPass)                e.confirmPass  = 'Confirm your new password';
     else if (confirmPass !== newPass) e.confirmPass = 'Passwords do not match';
-    if (Object.keys(e).length) {
-      setErrors(e);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
-    setLoading(true);
-    setErrors({});
+    if (Object.keys(e).length) { setErrors(e); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); return; }
+    setLoading(true); setErrors({});
     try {
-      // Use the OTP that was verified and stored by verify-otp.tsx.
-      // Fallback to '123456' only for demo mode (backend is unreachable).
-      await authResetPassword(pendingReg!.phone, pendingReg!.otp ?? '123456', newPass);
-      setPendingReg(null);
+      await authChangePassword(user!.email, currentPass, newPass);
       setSuccess(true);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err: any) {
-      const msg = err?.response?.data?.detail ?? err?.message ?? 'Password reset failed.';
-      setErrors({ general: String(msg) });
+      setErrors({ general: err?.message ?? 'Password change failed.' });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }
 
   // ── Success state ──────────────────────────────────────────────────────────
@@ -190,13 +181,17 @@ export default function ResetPasswordScreen() {
             <View style={s.successIcon}>
               <Text style={s.successIconText}>✓</Text>
             </View>
-            <Text style={s.successTitle}>Password reset!</Text>
-            <Text style={s.successSub}>You can now sign in with your new password.</Text>
+            <Text style={s.successTitle}>{isLoggedIn ? 'Password changed!' : 'Check your inbox'}</Text>
+            <Text style={s.successSub}>
+              {isLoggedIn
+                ? 'Your password has been updated successfully.'
+                : `A password reset link has been sent to ${email || 'your email'}. Check your inbox and follow the link.`}
+            </Text>
             <TouchableOpacity
               style={s.btn}
-              onPress={() => router.replace('/login')}
+              onPress={() => isLoggedIn ? router.back() : router.replace('/login')}
             >
-              <Text style={s.btnText}>Sign in  →</Text>
+              <Text style={s.btnText}>{isLoggedIn ? 'Done  →' : 'Sign in  →'}</Text>
             </TouchableOpacity>
           </Animated.View>
         </View>
@@ -221,12 +216,12 @@ export default function ResetPasswordScreen() {
           {/* Heading */}
           <Animated.View entering={FadeInDown.duration(440).delay(60)} style={s.headingWrap}>
             <Text style={s.heading}>
-              {isPhase2 ? 'New password' : 'Reset password'}
+              {isLoggedIn ? 'Change password' : 'Reset password'}
             </Text>
             <Text style={s.subheading}>
-              {isPhase2
-                ? `Set a new password for +91 ${pendingReg?.phone}`
-                : 'Enter your registered mobile number to receive a reset code'}
+              {isLoggedIn
+                ? 'Enter your current password then choose a new one'
+                : 'Enter your email address and we\'ll send you a reset link'}
             </Text>
           </Animated.View>
 
@@ -237,27 +232,19 @@ export default function ResetPasswordScreen() {
             </Animated.View>
           )}
 
-          {/* Phase 1 — mobile input */}
-          {!isPhase2 && (
-            <Animated.View entering={FadeInDown.duration(440).delay(140)}>
+          {/* Logged-in: real change-password form */}
+          {isLoggedIn && (
+            <Animated.View entering={FadeInDown.duration(440).delay(140)} style={{ gap: 0 }}>
               <FloatingLabelInput
-                label="Mobile number"
-                value={phone}
-                onChangeText={(t) => { setPhone(t.replace(/\D/g, '')); setErrors({}); }}
-                keyboardType="phone-pad"
-                returnKeyType="done"
-                onSubmitEditing={handleSendOtp}
-                maxLength={10}
-                prefix="+91"
-                error={errors.phone}
+                label="Current password"
+                value={currentPass}
+                onChangeText={(t) => { setCurrentPass(t); setErrors({}); }}
+                secureTextEntry={!showPass}
+                returnKeyType="next"
+                onSubmitEditing={() => newPassRef.current?.focus()}
+                error={errors.currentPass}
                 autoFocus
               />
-            </Animated.View>
-          )}
-
-          {/* Phase 2 — new password */}
-          {isPhase2 && (
-            <Animated.View entering={FadeInDown.duration(440).delay(140)} style={{ gap: 0 }}>
               <FloatingLabelInput
                 label="New password"
                 value={newPass}
@@ -265,8 +252,8 @@ export default function ResetPasswordScreen() {
                 secureTextEntry={!showPass}
                 returnKeyType="next"
                 onSubmitEditing={() => confirmRef.current?.focus()}
+                inputRef={newPassRef}
                 error={errors.newPass}
-                autoFocus
                 rightEl={
                   <TouchableOpacity onPress={() => setShowPass((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <Text style={s.showHide}>{showPass ? 'Hide' : 'Show'}</Text>
@@ -279,9 +266,25 @@ export default function ResetPasswordScreen() {
                 onChangeText={(t) => { setConfirmPass(t); setErrors({}); }}
                 secureTextEntry={!showPass}
                 returnKeyType="done"
-                onSubmitEditing={handleSetPassword}
+                onSubmitEditing={handleChangePassword}
                 error={errors.confirmPass}
                 inputRef={confirmRef}
+              />
+            </Animated.View>
+          )}
+
+          {/* Forgot-password — email input */}
+          {!isLoggedIn && (
+            <Animated.View entering={FadeInDown.duration(440).delay(140)}>
+              <FloatingLabelInput
+                label="Email address"
+                value={email}
+                onChangeText={(t) => { setEmail(t.trim()); setErrors({}); }}
+                keyboardType="email-address"
+                returnKeyType="done"
+                onSubmitEditing={handleSendReset}
+                error={errors.email}
+                autoFocus
               />
             </Animated.View>
           )}
@@ -291,7 +294,7 @@ export default function ResetPasswordScreen() {
             <Animated.View style={btnStyle}>
               <TouchableOpacity
                 style={[s.btn, loading && s.btnLoading]}
-                onPress={isPhase2 ? handleSetPassword : handleSendOtp}
+                onPress={isLoggedIn ? handleChangePassword : handleSendReset}
                 onPressIn={() => { btnScale.value = withSpring(0.97, { damping: 20, stiffness: 300 }); }}
                 onPressOut={() => { btnScale.value = withSpring(1,    { damping: 20, stiffness: 300 }); }}
                 disabled={loading}
@@ -299,15 +302,15 @@ export default function ResetPasswordScreen() {
               >
                 <Text style={s.btnText}>
                   {loading
-                    ? (isPhase2 ? 'Saving…' : 'Sending OTP…')
-                    : (isPhase2 ? 'Save password  →' : 'Send OTP  →')}
+                    ? (isLoggedIn ? 'Saving…' : 'Sending…')
+                    : (isLoggedIn ? 'Save password  →' : 'Send reset link  →')}
                 </Text>
               </TouchableOpacity>
             </Animated.View>
           </Animated.View>
 
-          {/* Back to login */}
-          {!isPhase2 && (
+          {/* Back to login (only on forgot-password flow) */}
+          {!isLoggedIn && (
             <Animated.View entering={FadeInDown.duration(440).delay(260)} style={s.loginLinkWrap}>
               <Text style={s.loginLinkText}>Remember your password?</Text>
               <TouchableOpacity onPress={() => router.replace('/login')}>

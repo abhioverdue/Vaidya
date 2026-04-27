@@ -21,6 +21,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useAppStore } from '@/store';
 import { COLORS, TRIAGE_CONFIG, TYPE, RADIUS } from '@/constants';
+import { mScale, scale } from '@/utils/responsive';
 import { TriageTag } from '@/components/ui/TriageTag';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { GradientCard } from '@/components/ui/GradientCard';
@@ -355,11 +356,11 @@ export default function ResultScreen() {
           <Animated.View entering={FadeInDown.duration(350).delay(160)}>
             <GradientCard>
               <Text style={s.cardLabel}>{t('audio_result.title').toUpperCase()}</Text>
-              <Text style={s.diagName}>{(session as FullTriageResponse).audio_result.label || 'Respiratory assessment'}</Text>
+              <Text style={s.diagName}>{(session as FullTriageResponse).audio_result?.top_prediction?.label || 'Respiratory assessment'}</Text>
               <View style={s.confRow}>
                 <Text style={s.confMetaLabel}>{t('result.confidence_label')}</Text>
                 <AnimatedConfidenceBar
-                  value={Math.round(((session as FullTriageResponse).audio_result.confidence || 0) * 100)}
+                  value={Math.round(((session as FullTriageResponse).audio_result?.top_prediction?.confidence || 0) * 100)}
                   color={COLORS.sage}
                   delay={400}
                 />
@@ -369,22 +370,37 @@ export default function ResultScreen() {
         )}
 
         {/* ── Vision result ───────────────────────────────────────── */}
-        {online && (session as FullTriageResponse).vision_result && (
-          <Animated.View entering={FadeInDown.duration(350).delay(180)}>
-            <GradientCard>
-              <Text style={s.cardLabel}>{t('image_result.title').toUpperCase()}</Text>
-              <Text style={s.diagName}>{(session as FullTriageResponse).vision_result?.top_prediction || 'Pathology detected'}</Text>
-              <View style={s.confRow}>
-                <Text style={s.confMetaLabel}>{t('result.confidence_label')}</Text>
-                <AnimatedConfidenceBar
-                value={Math.round(((session as FullTriageResponse).vision_result.all_predictions?.[0]?.confidence ?? 0.85) * 100)}
-                color={COLORS.sage}
-                delay={450}
-              />
-              </View>
-            </GradientCard>
-          </Animated.View>
-        )}
+        {online && (session as FullTriageResponse).vision_result && (() => {
+          const vr       = (session as FullTriageResponse).vision_result;
+          const topPred  = vr?.top_prediction;
+          const topLabel = typeof topPred === 'string' ? topPred : (topPred?.label ?? 'Pathology detected');
+          const topConf  = typeof topPred === 'object' && topPred?.confidence != null
+            ? Math.round(topPred.confidence * 100)
+            : Math.round((vr?.all_predictions?.[0]?.confidence ?? 0.85) * 100);
+          return (
+            <Animated.View entering={FadeInDown.duration(350).delay(180)}>
+              <GradientCard>
+                <Text style={s.cardLabel}>{t('image_result.title').toUpperCase()}</Text>
+                <Text style={s.diagName}>{topLabel}</Text>
+                <View style={s.confRow}>
+                  <Text style={s.confMetaLabel}>{t('result.confidence_label')}</Text>
+                  <AnimatedConfidenceBar value={topConf} color={COLORS.sage} delay={450} />
+                </View>
+                {!!vr?.gemini_description && (
+                  <View style={s.visionGeminiWrap}>
+                    <View style={s.geminiHeader}>
+                      <Text style={s.cardLabel}>GEMINI VISION ANALYSIS</Text>
+                      <View style={s.geminiBadge}>
+                        <Text style={s.geminiBadgeText}>✦ Gemini</Text>
+                      </View>
+                    </View>
+                    <Text style={s.geminiText}>{vr.gemini_description}</Text>
+                  </View>
+                )}
+              </GradientCard>
+            </Animated.View>
+          );
+        })()}
 
         {/* ── Fusion detail button ─────────────────────────────────── */}
         {online && ((session as FullTriageResponse).audio_result || (session as FullTriageResponse).vision_result) && (
@@ -420,32 +436,39 @@ export default function ResultScreen() {
           </Animated.View>
         ) : null}
 
-        {/* ── Differential diagnoses ───────────────────────────────── */}
-        {diagnosis.differential.length > 0 && (
-          <Animated.View entering={FadeInDown.duration(350).delay(230)}>
-            <GradientCard>
-              <Text style={s.cardLabel}>{t('result.differential_label').toUpperCase()}</Text>
-              {diagnosis.differential.slice(0, 4).map((d, i) => {
-                const pct = Math.round(d.confidence * 100);
-                return (
-                  <View key={i} style={s.diffRow}>
-                    <View style={s.diffRank}>
-                      <Text style={s.diffRankText}>{i + 2}</Text>
-                    </View>
-                    <View style={s.diffBody}>
-                      <Text style={s.diffName} numberOfLines={1}>{d.disease}</Text>
-                      <AnimatedConfidenceBar
-                        value={pct}
-                        color={COLORS.inkSoft}
-                        delay={300 + i * 80}
-                      />
-                    </View>
+        {/* ── Top 3 diagnoses (primary + differential) ────────────── */}
+        <Animated.View entering={FadeInDown.duration(350).delay(230)}>
+          <GradientCard>
+            <Text style={s.cardLabel}>TOP 3 DIAGNOSES</Text>
+            {/* Rank 1 — primary */}
+            <View style={s.diffRow}>
+              <View style={[s.diffRank, { backgroundColor: cfg?.color ?? COLORS.sage, borderColor: cfg?.color ?? COLORS.sage }]}>
+                <Text style={[s.diffRankText, { color: '#fff' }]}>1</Text>
+              </View>
+              <View style={s.diffBody}>
+                <Text style={[s.diffName, { fontWeight: '700', color: COLORS.ink }]} numberOfLines={1}>
+                  {diagnosis.primary_diagnosis}
+                </Text>
+                <AnimatedConfidenceBar value={confidence} color={cfg?.color ?? COLORS.sage} delay={300} />
+              </View>
+            </View>
+            {/* Ranks 2–4 from differential */}
+            {(diagnosis.differential ?? []).slice(0, 3).map((d, i) => {
+              const pct = Math.round(d.confidence * 100);
+              return (
+                <View key={i} style={s.diffRow}>
+                  <View style={s.diffRank}>
+                    <Text style={s.diffRankText}>{i + 2}</Text>
                   </View>
-                );
-              })}
-            </GradientCard>
-          </Animated.View>
-        )}
+                  <View style={s.diffBody}>
+                    <Text style={s.diffName} numberOfLines={1}>{d.disease}</Text>
+                    <AnimatedConfidenceBar value={pct} color={COLORS.inkSoft} delay={380 + i * 80} />
+                  </View>
+                </View>
+              );
+            })}
+          </GradientCard>
+        </Animated.View>
 
         {/* ── Precautions ─────────────────────────────────────────── */}
         {online && (diagnosis as DiagnosisResult).precautions?.length > 0 && (
@@ -502,8 +525,8 @@ const s = StyleSheet.create({
 
   // Header
   header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, marginBottom: 12 },
-  backBtn:    { width: 40, height: 40, justifyContent: 'center' },
-  backCircle: { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.parchmentWarm, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
+  backBtn:    { width: scale(40), height: scale(40), justifyContent: 'center' },
+  backCircle: { width: scale(34), height: scale(34), borderRadius: scale(17), backgroundColor: COLORS.parchmentWarm, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
   backGlyph:  { fontSize: 17, color: COLORS.ink, marginTop: -1 },
   headerTitle:{ ...TYPE.micro, color: COLORS.textMuted, letterSpacing: 2, fontWeight: '700' },
   shareBtn:   { padding: 4 },
@@ -543,7 +566,7 @@ const s = StyleSheet.create({
 
   // Diagnosis card
   cardLabel:     { ...TYPE.micro, color: COLORS.textFaint, letterSpacing: 1.5, marginBottom: 10, fontWeight: '700' },
-  diagName:      { fontSize: 23, fontWeight: '700', letterSpacing: -0.5, color: COLORS.ink, marginBottom: 14, lineHeight: 30 },
+  diagName:      { fontSize: mScale(23), fontWeight: '700', letterSpacing: -0.5, color: COLORS.ink, marginBottom: 14, lineHeight: mScale(30) },
   highConfChipWrap: { marginBottom: 14 },
 
   // Confidence section
@@ -555,6 +578,9 @@ const s = StyleSheet.create({
 
   sourceSep:     { borderTopWidth: 1, borderTopColor: COLORS.border, paddingTop: 12 },
   descText:      { ...TYPE.bodyMed, color: COLORS.textSub, lineHeight: 24 },
+
+  // Gemini Vision section (inside vision card)
+  visionGeminiWrap: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: COLORS.border },
 
   // Gemini AI health guide
   geminiHeader:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },

@@ -3,7 +3,7 @@ Vaidya — symptom extraction service  (Module 3 — complete)
 Pipeline:
   1. Redis cache check  (TTL 10 min — same text → skip all inference)
   2. Translation        (hi/ta → en via translator.py from Module 2)
-  3. LLM extraction     (Ollama Llama 3.1 8B with engineered system prompt + few-shot)
+  3. LLM extraction     (Gemini 2.0 Flash with engineered system prompt + few-shot)
   4. spaCy NER pass     (en_core_web_sm — catches what LLM misses)
   5. Canonical mapping  (synonym map → difflib fuzzy match → 133-feature vector)
   6. Validation & cache persist
@@ -179,6 +179,64 @@ SYNONYM_MAP: dict[str, str] = {
     "thirsty":               "dehydration",
     "acne":                  "pus_filled_pimples",
     "pimples":               "pus_filled_pimples",
+    # HIV / AIDS
+    "aids":                  "extra_marital_contacts",
+    "hiv":                   "extra_marital_contacts",
+    "hiv positive":          "extra_marital_contacts",
+    "hiv aids":              "extra_marital_contacts",
+    "hiv/aids":              "extra_marital_contacts",
+    "immunodeficiency":      "muscle_wasting",
+    "muscle wasting":        "muscle_wasting",
+    "blood transfusion":     "receiving_blood_transfusion",
+    "unsterile injection":   "receiving_unsterile_injections",
+    "unsterile injections":  "receiving_unsterile_injections",
+    # Genital / penile symptoms
+    "penile pain":           "internal_itching",
+    "penile discharge":      "internal_itching",
+    "penile itching":        "internal_itching",
+    "penile sore":           "internal_itching",
+    "penis pain":            "internal_itching",
+    "penis sore":            "internal_itching",
+    "penis discharge":       "internal_itching",
+    "pain in penis":         "internal_itching",
+    "genital pain":          "internal_itching",
+    "genital discharge":     "internal_itching",
+    "genital itching":       "internal_itching",
+    "genital sore":          "internal_itching",
+    "groin pain":            "internal_itching",
+    "vaginal pain":          "internal_itching",
+    "vaginal discharge":     "internal_itching",
+    "vaginal itching":       "internal_itching",
+    "urethral discharge":    "burning_micturition",
+    "urethral pain":         "burning_micturition",
+    "std":                   "internal_itching",
+    "sexually transmitted":  "internal_itching",
+    # Trauma / musculoskeletal (not in 41-disease dataset — triggers LLM fallback)
+    "ankle pain":            "joint_pain",
+    "ankle swollen":         "swelling_joints",
+    "ankle swelling":        "swelling_joints",
+    "swollen ankle":         "swelling_joints",
+    "ankle injury":          "painful_walking",
+    "ankle sprain":          "painful_walking",
+    "ankle fracture":        "painful_walking",
+    "ankle hurt":            "joint_pain",
+    "sprain":                "painful_walking",
+    "fracture":              "painful_walking",
+    "broken bone":           "painful_walking",
+    "bone pain":             "joint_pain",
+    "limping":               "painful_walking",
+    "can't walk":            "painful_walking",
+    "cannot walk":           "painful_walking",
+    "difficulty walking":    "painful_walking",
+    "joint swelling":        "swelling_joints",
+    "swollen joint":         "swelling_joints",
+    "torn ligament":         "joint_pain",
+    "knee swollen":          "swelling_joints",
+    "knee injury":           "knee_pain",
+    "wrist pain":            "joint_pain",
+    "wrist swollen":         "swelling_joints",
+    "shoulder pain":         "joint_pain",
+    "elbow pain":            "joint_pain",
 }
 
 
@@ -232,20 +290,10 @@ def _build_messages(english_text: str) -> list[dict]:
     reraise=False,
 )
 async def _call_gemini_extractor(english_text: str) -> str | None:
-    """Call Gemini REST API for symptom extraction (Ollama fully migrated)."""
-    from app.services.diagnosis.llm_fallback import _call_gemini  # local import avoids circular
-
+    """Call Gemini REST API for symptom extraction."""
+    from app.services.diagnosis.llm_fallback import _call_gemini  # avoids circular import
     messages = _build_messages(english_text)
-    # Convert Ollama chat format → Gemini contents format
-    # Merge system + few-shot + user into a single user turn for Gemini
-    parts_text = ""
-    for msg in messages:
-        role_label = "SYSTEM" if msg["role"] == "system" else (
-            "EXAMPLE_USER" if msg["role"] == "user" else "EXAMPLE_ASSISTANT"
-        )
-        parts_text += f"{role_label}:\n{msg['content']}\n\n"
-    gemini_messages = [{"role": "user", "parts": [{"text": parts_text.strip()}]}]
-    return await _call_gemini(gemini_messages)
+    return await _call_gemini(messages)
 
 
 # ── JSON parsing (4 fallback strategies) ─────────────────────────────────────
@@ -419,8 +467,8 @@ async def extract_symptoms(
         llm_data = _regex_fallback(english_text)
         source   = "regex_fallback"
 
-    # Stage 4: spaCy
-    loop         = asyncio.get_event_loop()
+    # Stage 4: spaCy (run_in_executor requires the running loop, not get_event_loop)
+    loop         = asyncio.get_running_loop()
     spacy_extras = await loop.run_in_executor(None, _spacy_extract, english_text)
 
     logger.info(

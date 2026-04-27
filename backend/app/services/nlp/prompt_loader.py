@@ -13,7 +13,7 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
+PROMPTS_DIR = Path(__file__).parent.parent.parent / "prompts"
 HOT_RELOAD  = os.getenv("PROMPT_HOT_RELOAD", "false").lower() == "true"
 
 # In-memory cache for production (avoid disk reads on every request)

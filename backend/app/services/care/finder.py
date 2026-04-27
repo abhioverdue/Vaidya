@@ -2,17 +2,20 @@
 Vaidya — Care routing service (Module 7 — complete)
 
 Orchestrates:
-  1. Overpass API → OSM hospitals within radius
-  2. Nominatim   → reverse geocode patient GPS → district/state
-  3. ABDM        → enrich top 5 results with PMJAY empanelment
-  4. Ranker      → score hospitals by distance × type × triage × insurance
-  5. Redis       → 24h cache on 1 km GPS grid cell
+  1. Google Places API → fast (~200ms), reliable hospital search  [PRIMARY]
+  2. Overpass API      → OSM fallback if Google Places unavailable  [SECONDARY]
+  3. Static DB         → bundled Chennai hospital list              [TERTIARY]
+  4. Nominatim         → reverse geocode patient GPS → district/state
+  5. ABDM              → enrich top 5 results with PMJAY empanelment
+  6. Ranker            → score by distance × type × triage × insurance
+  7. Redis             → 24h cache on 1 km GPS grid cell
 """
 
 from __future__ import annotations
 
 import json
 import uuid
+from pathlib import Path
 from typing import Optional
 
 import structlog
@@ -24,11 +27,50 @@ from app.services.care.overpass import (
     reverse_geocode,
     haversine_km,
 )
+from app.services.care.google_places import query_google_places
 from app.services.care.abdm import enrich_with_empanelment
 from app.services.care.ranker import score_hospitals
 from app.services.care.esanjeevani import get_available_slots, book_slot
 
 logger = structlog.get_logger(__name__)
+
+_STATIC_DB_PATH = Path(__file__).parent.parent.parent / "data" / "hospitals_static.json"
+_static_hospitals: list[dict] | None = None
+
+
+def _load_static_hospitals() -> list[dict]:
+    global _static_hospitals
+    if _static_hospitals is not None:
+        return _static_hospitals
+    try:
+        with open(_STATIC_DB_PATH, encoding="utf-8") as f:
+            _static_hospitals = json.load(f).get("hospitals", [])
+        logger.info("vaidya.care.static_db_loaded", count=len(_static_hospitals))
+    except Exception as exc:
+        logger.warning("vaidya.care.static_db_load_failed", error=str(exc))
+        _static_hospitals = []
+    return _static_hospitals
+
+
+def _static_hospitals_near(lat: float, lng: float, radius_m: int, specialty: Optional[str] = None) -> list[dict]:
+    result = []
+    for h in _load_static_hospitals():
+        dist_km = haversine_km(lat, lng, h["latitude"], h["longitude"])
+        if dist_km * 1000 <= radius_m:
+            result.append({
+                "osm_id":          h.get("id", "static"),
+                "name":            h["name"],
+                "hospital_type":   h.get("hospital_type", "other"),
+                "address":         h.get("address"),
+                "distance_km":     round(dist_km, 2),
+                "phone":           h.get("phone"),
+                "ambulance_108":   h.get("ambulance_108", False),
+                "open_24h":        h.get("open_24h", False),
+                "pmjay_empanelled":h.get("pmjay_empanelled", False),
+                "latitude":        h["latitude"],
+                "longitude":       h["longitude"],
+            })
+    return result
 
 
 def _fallback_hospitals(lat: float, lng: float) -> list[dict]:
@@ -80,12 +122,23 @@ async def find_nearby_hospitals(
             logger.debug("vaidya.care.cache_hit")
             return HospitalListResponse(**json.loads(cached))
 
-    # ── Stage 2: Overpass OSM query ───────────────────────────────────────────
-    facilities = await query_overpass(lat, lng, radius_m, specialty)
+    # ── Stage 2: Google Places (primary — fast) ───────────────────────────────
+    facilities = await query_google_places(lat, lng, radius_m, specialty)
 
+    # ── Stage 3: Overpass fallback if Places returned nothing ─────────────────
     if not facilities:
-        logger.warning("vaidya.care.overpass_empty", lat=lat, lng=lng)
-        facilities = _fallback_hospitals(lat, lng)
+        logger.info("vaidya.care.places_empty_trying_overpass", lat=lat, lng=lng)
+        facilities = await query_overpass(lat, lng, radius_m, specialty)
+
+    # ── Stage 4: Static DB if both live sources failed ─────────────────────────
+    if not facilities:
+        logger.warning("vaidya.care.live_sources_empty", lat=lat, lng=lng)
+        static = _static_hospitals_near(lat, lng, radius_m, specialty)
+        if static:
+            logger.info("vaidya.care.using_static_db", count=len(static), lat=lat, lng=lng)
+            facilities = static
+        else:
+            facilities = _fallback_hospitals(lat, lng)
 
     # ── Stage 3: Nominatim reverse geocode ────────────────────────────────────
     geo = await reverse_geocode(lat, lng)

@@ -94,15 +94,15 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "http://localhost:8000",
+      "apiBaseUrl": "http://40.192.2.179:8000",
       "eas": {
-        "projectId": "82b3e908-7700-486d-9619-5d1c626c16c1"
+        "projectId": "7f8e0df4-d70c-4ab4-b20e-995e148457b8"
       },
       "router": {
         "origin": false
       }
     },
     "jsEngine": "hermes",
-    "owner": "ak0215s-organization"
+    "owner": "infinity1234s-organization"
   }
 }

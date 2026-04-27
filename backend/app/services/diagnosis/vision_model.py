@@ -19,6 +19,9 @@ Default dataset_type is inferred from filename if not provided.
 """
 
 import asyncio
+import base64
+import json
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -40,6 +43,12 @@ TASK_CLASSES = {
     "skin":  SKIN_CLASSES,
     "wound": WOUND_CLASSES,
 }
+
+# Below this top-prediction confidence, fall back to Gemini vision
+VISION_CONFIDENCE_THRESHOLD = 0.50
+
+_MIME_MAP = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+             ".gif": "image/gif", ".webp": "image/webp"}
 
 
 @lru_cache(maxsize=1)
@@ -152,6 +161,91 @@ def _run_inference(model, image_path: str, dataset_type: str) -> dict:
     }
 
 
+async def _gemini_vision_fallback(file_path: str, dataset_type: str) -> dict | None:
+    """
+    Use Gemini's multimodal vision when the PyTorch model is unavailable or
+    returns low-confidence predictions.  Returns same dict shape as _run_inference.
+    """
+    if not settings.GEMINI_API_KEY:
+        return None
+
+    try:
+        image_bytes = Path(file_path).read_bytes()
+        b64         = base64.b64encode(image_bytes).decode()
+        mime_type   = _MIME_MAP.get(Path(file_path).suffix.lower(), "image/jpeg")
+
+        classes      = TASK_CLASSES.get(dataset_type, CHEST_CLASSES)
+        classes_str  = " | ".join(classes)
+
+        prompt_text = (
+            f"You are a medical image classifier. Analyse this {dataset_type} medical image.\n"
+            f"Classify it into one of these categories: {classes_str}\n\n"
+            f"Return ONLY valid JSON with exactly this structure — no prose:\n"
+            f'{{"top_prediction": {{"label": "...", "confidence": 0.0}}, '
+            f'"all_predictions": ['
+            f'{{"label": "...", "confidence": 0.0}}, '
+            f'{{"label": "...", "confidence": 0.0}}, '
+            f'{{"label": "...", "confidence": 0.0}}]}}\n\n'
+            f"Rules:\n"
+            f"- all_predictions must list exactly 3 entries ordered highest to lowest confidence\n"
+            f"- confidence values across all entries must sum to approximately 1.0\n"
+            f"- labels must be chosen only from the category list above\n"
+            f"- top_prediction must match all_predictions[0]"
+        )
+
+        messages = [{
+            "role": "user",
+            "parts": [
+                {"inlineData": {"mimeType": mime_type, "data": b64}},
+                {"text": prompt_text},
+            ],
+        }]
+
+        from app.services.diagnosis.llm_fallback import _call_gemini
+        raw = await _call_gemini(messages)
+        if not raw:
+            return None
+
+        data = None
+        for candidate in [raw, re.sub(r"```(?:json)?|```", "", raw).strip()]:
+            try:
+                data = json.loads(candidate)
+                break
+            except json.JSONDecodeError:
+                continue
+        if not data:
+            logger.warning("vaidya.vision_model.gemini_parse_failed", preview=raw[:120])
+            return None
+
+        all_preds = data.get("all_predictions", [])[:3]
+        # Pad to 3 if Gemini returned fewer
+        while len(all_preds) < 3:
+            all_preds.append({"label": classes[-1], "confidence": 0.0})
+
+        for p in all_preds:
+            conf = float(p.get("confidence", 0.0))
+            p["confidence"]       = round(conf, 4)
+            p["confidence_label"] = "High" if conf > 0.6 else "Medium" if conf > 0.3 else "Low"
+
+        top = all_preds[0]
+        logger.info(
+            "vaidya.vision_model.gemini_fallback_ok",
+            task=dataset_type,
+            top=top.get("label"),
+            confidence=top.get("confidence"),
+        )
+        return {
+            "dataset_type":    dataset_type,
+            "top_prediction":  top,
+            "all_predictions": all_preds,
+            "signal_source":   "gemini_vision",
+        }
+
+    except Exception as exc:
+        logger.warning("vaidya.vision_model.gemini_fallback_error", error=str(exc))
+        return None
+
+
 async def run_vision_model(file_path: str, dataset_type: str | None = None) -> dict:
     """
     Run the hybrid multitask vision model on an uploaded image.
@@ -163,27 +257,45 @@ async def run_vision_model(file_path: str, dataset_type: str | None = None) -> d
     Returns:
         dict with top_prediction, all_predictions, dataset_type
     """
+    task  = dataset_type or _infer_task_type(file_path)
     model = _load_vision_model()
-    if model is None:
-        return {
-            "error": "Vision model not loaded",
-            "note": "Place hybrid_multitask_model.pth in models/vision/",
-        }
 
-    task = dataset_type or _infer_task_type(file_path)
+    if model is not None:
+        loop = asyncio.get_running_loop()
+        try:
+            result = await loop.run_in_executor(
+                None, _run_inference, model, file_path, task
+            )
+            top_conf = result["top_prediction"]["confidence"]
+            logger.info(
+                "vaidya.vision_model.result",
+                task=task,
+                top=result["top_prediction"]["label"],
+                confidence=top_conf,
+            )
+            if top_conf >= VISION_CONFIDENCE_THRESHOLD:
+                return result
 
-    loop = asyncio.get_event_loop()
-    try:
-        result = await loop.run_in_executor(
-            None, _run_inference, model, file_path, task
-        )
-        logger.info(
-            "vaidya.vision_model.result",
-            task=task,
-            top=result["top_prediction"]["label"],
-            confidence=result["top_prediction"]["confidence"],
-        )
-        return result
-    except Exception as exc:
-        logger.error("vaidya.vision_model.inference_error", error=str(exc))
-        return {"error": str(exc), "signal_source": "vision_model"}
+            # Low confidence — try Gemini to get a better read
+            logger.info(
+                "vaidya.vision_model.low_confidence_gemini",
+                task=task,
+                pytorch_conf=top_conf,
+            )
+            gemini = await _gemini_vision_fallback(file_path, task)
+            return gemini if gemini else result
+
+        except Exception as exc:
+            logger.error("vaidya.vision_model.inference_error", error=str(exc))
+
+    # Model not loaded or inference crashed — fall back to Gemini
+    logger.info("vaidya.vision_model.pytorch_unavailable_gemini", task=task)
+    gemini = await _gemini_vision_fallback(file_path, task)
+    if gemini:
+        return gemini
+
+    return {
+        "error": "Vision model not loaded and Gemini vision fallback unavailable",
+        "note":  "Place hybrid_multitask_model.pth in models/vision/ or set GEMINI_API_KEY",
+        "signal_source": "vision_model",
+    }

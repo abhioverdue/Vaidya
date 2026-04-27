@@ -382,7 +382,7 @@ async def fuse_signals(
     # Clamp to [0, 1] — corroboration can push above 1.0 in edge cases
     fused_confidence = min(1.0, max(0.0, fused_confidence))
 
-    # Build top-3 differential
+    # Build top-3 differential — always include 3 regardless of score
     differential = [
         {
             "disease":    disease,
@@ -394,7 +394,6 @@ async def fuse_signals(
             ),
         }
         for disease, score in sorted_diseases[1:4]
-        if score > 0.05
     ]
 
     # ── Collect red flags from all sources ───────────────────────────────────
@@ -424,30 +423,50 @@ async def fuse_signals(
         nlp_sig, audio_sig, vision_sig, plan, fused_scores, symptom_count
     )
 
-    # ── LLM fallback gate ─────────────────────────────────────────────────────
-    # Trigger fallback if:
-    #   1. Fused confidence is below threshold AND
-    #   2. Symptom count is below minimum
-    # Note: if audio/vision strongly corroborate, we trust the fusion result
-    #   even at lower NLP confidence — that's the whole point of fusion.
+    from app.services.diagnosis.llm_fallback import (
+        run_llm_fallback, enrich_diagnosis_with_gemini, validate_diagnosis_with_gemini,
+    )
+
+    # Zero symptoms extracted — always fall back (no point calling Gemini with nothing)
+    no_symptoms_extracted = symptom_count == 0
+
     nlp_alone_too_weak = (
         nlp_sig.confidence < settings.CONFIDENCE_THRESHOLD
         and symptom_count < MIN_SYMPTOMS_FOR_CLASSIFIER
     )
-    fusion_still_weak = fused_confidence < (settings.CONFIDENCE_THRESHOLD * 0.8)
 
-    should_fallback = nlp_alone_too_weak and fusion_still_weak
+    # ── Gemini validation gate (always runs, cached to protect rate limits) ───
+    # validate_diagnosis_with_gemini has in-process caching: same diagnosis +
+    # symptoms hash never fires a second Gemini call within the process lifetime.
+    if no_symptoms_extracted:
+        validation = None
+    else:
+        validation = await validate_diagnosis_with_gemini(
+            primary_disease, extracted_symptoms or [], language
+        )
 
-    from app.services.diagnosis.llm_fallback import (
-        run_llm_fallback, enrich_diagnosis_with_gemini,
-    )
+    gemini_disagrees = validation is not None and not validation.get("agrees")
+
+    # Note: the old code ANDed nlp_alone_too_weak with fusion_still_weak (threshold*0.8).
+    # That gate wrongly blocks fallback when multilingual extraction produces 1-3 symptoms
+    # with moderate XGBoost confidence (e.g. 0.50 > 0.48) — the fused score sits above
+    # the 80% bar but is still too unreliable.  nlp_alone_too_weak is conservative enough
+    # (requires BOTH low confidence AND few symptoms) without a secondary gate.
+    should_fallback = gemini_disagrees or nlp_alone_too_weak or no_symptoms_extracted
 
     if should_fallback:
+        reason = (
+            "no_symptoms_extracted" if no_symptoms_extracted else
+            "gemini_disagrees"      if gemini_disagrees      else
+            "low_confidence"
+        )
         logger.info(
             "vaidya.fusion.llm_fallback",
+            reason=reason,
+            xgboost_pred=primary_disease,
+            gemini_alternative=validation.get("alternative") if validation else None,
             nlp_conf=round(nlp_sig.confidence, 3),
             fused_conf=round(fused_confidence, 3),
-            symptom_count=symptom_count,
         )
         fallback = await run_llm_fallback(
             symptoms=extracted_symptoms or [],
@@ -455,33 +474,65 @@ async def fuse_signals(
             severity=self_severity,
             language=language,
         )
-        # Preserve red flags from all signal sources
         fallback.red_flags = list(dict.fromkeys(red_flags + fallback.red_flags))
-        # Gemini fallback already includes description/precautions; still enrich
-        # with a plain-language guide if the diagnosis was determined
+
+        # If Gemini was unavailable (429/rate-limit) and returned "Unable to determine",
+        # use the XGBoost prediction directly rather than showing a useless non-answer.
+        if not fallback.primary_diagnosis or "Unable" in fallback.primary_diagnosis or fallback.confidence == 0.0:
+            if primary_disease and fused_confidence > 0.0:
+                logger.warning(
+                    "vaidya.fusion.gemini_unavailable_using_xgboost",
+                    xgboost_pred=primary_disease,
+                    conf=round(fused_confidence, 3),
+                )
+                return DiagnosisResult(
+                    primary_diagnosis=primary_disease,
+                    confidence=round(fused_confidence, 4),
+                    differential=differential,
+                    diagnosis_source="xgboost",
+                    red_flags=red_flags,
+                    description=nlp_result.description,
+                    precautions=nlp_result.precautions or [
+                        "Visit your nearest doctor or PHC for a proper evaluation.",
+                        "Describe your symptoms clearly to the doctor.",
+                        "If symptoms worsen, call 108 immediately.",
+                    ],
+                    confidence_reason=f"XGBoost prediction — AI validation unavailable (confidence {round(fused_confidence * 100)}%)",
+                    disclaimer="This is an AI-assisted preliminary assessment only. Please consult a qualified healthcare professional.",
+                ), {
+                    "nlp": plan.w_nlp,
+                    "audio": plan.w_audio,
+                    "vision": plan.w_vision,
+                }
+
         if fallback.primary_diagnosis and "Unable" not in fallback.primary_diagnosis:
             fallback.gemini_explanation = await enrich_diagnosis_with_gemini(
                 fallback.primary_diagnosis, extracted_symptoms or [], language,
             )
+            # If enrichment failed (rate limit / 503), synthesise from precautions
+            if not fallback.gemini_explanation and fallback.precautions:
+                fallback.gemini_explanation = (
+                    f"**What to do now**\n" +
+                    "\n".join(f"• {p}" for p in fallback.precautions[:4])
+                )
         meta["fallback_triggered"] = True
-        logger.info("vaidya.fusion.complete", source="llm_gemini")
+        logger.info("vaidya.fusion.complete", source="llm_gemini", reason=reason)
         return fallback, {
             "nlp": plan.w_nlp,
             "audio": plan.w_audio,
             "vision": plan.w_vision,
         }
 
-    # ── Build final result ───────────────────────────────────────────────────
+    # ── Gemini agrees — build final fusion result ─────────────────────────────
     logger.info(
         "vaidya.fusion.complete",
         source="fusion",
         primary=primary_disease,
         fused_conf=round(fused_confidence, 3),
-        red_flags=len(red_flags),
+        gemini_validated=True,
         modalities=meta["modalities_used"],
     )
 
-    # Enrich every online diagnosis with a Gemini plain-language health guide
     gemini_explanation = await enrich_diagnosis_with_gemini(
         primary_disease, extracted_symptoms or [], language,
     )

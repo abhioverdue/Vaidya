@@ -30,7 +30,10 @@ export interface SymptomVectorResponse {
 export interface DifferentialEntry {
   disease: string;
   confidence: number;
-  confidence_label: 'High' | 'Medium' | 'Low';
+  /** Present on XGBoost path */
+  confidence_label?: 'High' | 'Medium' | 'Low';
+  /** Present on LLM path */
+  reasoning?: string | null;
 }
 
 export interface DiagnosisResult {
@@ -83,6 +86,9 @@ export interface VoiceInputResponse {
   transcript: string;
   detected_language: Language;
   confidence: number;
+  /** English translation — present when detected_language !== 'en' */
+  english_transcript?: string | null;
+  translation_method?: string | null;
 }
 
 // ── Care ──────────────────────────────────────────────────────────────────────
@@ -124,6 +130,12 @@ export interface OfflinePrediction {
   differential: { disease: string; confidence: number }[];
   source: 'tflite_offline';
   diagnosis_source?: string;
+  // Absent in offline predictions — typed optional so result.tsx casts are safe
+  red_flags?: string[];
+  precautions?: string[];
+  description?: string;
+  gemini_explanation?: string | null;
+  disclaimer?: string;
 }
 
 // ── App-level session ─────────────────────────────────────────────────────────

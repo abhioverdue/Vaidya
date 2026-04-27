@@ -122,8 +122,12 @@ export default function RootLayout() {
         <I18nextProvider i18n={i18n}>
           <QueryClientProvider client={queryClient}>
             <AppInit>
-              <StatusBar style="auto" />
-              <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+              <StatusBar style="dark" />
+              <Stack screenOptions={{
+                headerShown: false,
+                animation: 'slide_from_right',
+                contentStyle: { backgroundColor: COLORS.parchment },
+              }}>
                 <Stack.Screen name="login"          options={{ animation: 'fade' }} />
                 <Stack.Screen name="register"       options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="verify-otp"     options={{ animation: 'slide_from_right' }} />
@@ -151,6 +155,6 @@ export default function RootLayout() {
 }
 
 const styles = StyleSheet.create({
-  root:   { flex: 1 },
+  root:   { flex: 1, backgroundColor: COLORS.parchment },
   splash: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.parchment },
 });

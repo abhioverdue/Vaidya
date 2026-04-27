@@ -31,8 +31,9 @@ logger = structlog.get_logger(__name__)
 # ── Overpass mirrors (failover order) ─────────────────────────────────────────
 OVERPASS_MIRRORS = [
     "https://overpass-api.de/api/interpreter",
+    "https://overpass.osm.ch/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
-    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
 ]
 
 # ── Hospital type priority (lower = higher priority in sort) ──────────────────
@@ -49,7 +50,7 @@ TYPE_PRIORITY: dict[str, int] = {
 # Fetches:  hospital nodes + ways, clinics, healthcare centres, PHCs
 # "out body center" gives centre coords for ways (not just bounding box)
 OVERPASS_QL = """\
-[out:json][timeout:28];
+[out:json][timeout:20];
 (
   node["amenity"="hospital"](around:{radius},{lat},{lng});
   node["amenity"="clinic"](around:{radius},{lat},{lng});
@@ -60,7 +61,7 @@ OVERPASS_QL = """\
   way["amenity"="hospital"](around:{radius},{lat},{lng});
   way["amenity"="clinic"](around:{radius},{lat},{lng});
 );
-out body center 50;
+out body center 100;
 """
 
 
@@ -149,11 +150,10 @@ async def query_overpass(
 
     for mirror in OVERPASS_MIRRORS:
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(timeout=25) as client:
                 resp = await client.post(
                     mirror,
-                    content=f"data={ql}",
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    data={"data": ql},  # httpx handles proper URL-encoding
                 )
                 resp.raise_for_status()
                 osm = resp.json()

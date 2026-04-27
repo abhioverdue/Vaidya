@@ -18,7 +18,7 @@ import { useState, useRef, useCallback } from 'react';
 import * as Haptics from 'expo-haptics';
 
 import { useAppStore } from '@/store';
-import { authRequestOtp } from '@/services/auth';
+import { authRegister } from '@/services/auth';
 import { COLORS, TYPE, RADIUS } from '@/constants';
 
 // ── FloatingLabelInput (same as login, inlined for isolation) ─────────────────
@@ -152,17 +152,17 @@ const ps = StyleSheet.create({
 // ── RegisterScreen ────────────────────────────────────────────────────────────
 
 export default function RegisterScreen() {
-  const setPendingReg = useAppStore((s) => s.setPendingReg);
+  const setAuth = useAppStore((s) => s.setAuth);
 
   const [name,     setName]     = useState('');
-  const [phone,    setPhone]    = useState('');
+  const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [confirm,  setConfirm]  = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading,  setLoading]  = useState(false);
   const [errors,   setErrors]   = useState<Record<string, string>>({});
 
-  const phoneRef    = useRef<TextInput>(null);
+  const emailRef    = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmRef  = useRef<TextInput>(null);
 
@@ -171,29 +171,30 @@ export default function RegisterScreen() {
 
   function validate(): boolean {
     const e: Record<string, string> = {};
-    if (!name.trim())                       e.name     = 'Enter your full name';
-    if (!phone.trim())                      e.phone    = 'Enter your mobile number';
-    else if (!/^\d{10}$/.test(phone.trim())) e.phone   = 'Enter a valid 10-digit number';
-    if (!password)                           e.password = 'Enter a password';
-    else if (password.length < 6)            e.password = 'Password must be at least 6 characters';
-    if (!confirm)                            e.confirm  = 'Confirm your password';
-    else if (confirm !== password)           e.confirm  = 'Passwords do not match';
+    if (!name.trim())                                              e.name     = 'Enter your full name';
+    if (!email.trim())                                             e.email    = 'Enter your email address';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))    e.email    = 'Enter a valid email address';
+    if (!password)                                                 e.password = 'Enter a password';
+    else if (password.length < 6)                                  e.password = 'Password must be at least 6 characters';
+    if (!confirm)                                                  e.confirm  = 'Confirm your password';
+    else if (confirm !== password)                                 e.confirm  = 'Passwords do not match';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
 
-  async function handleSendOtp() {
+  async function handleRegister() {
     if (!validate()) { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); return; }
     setLoading(true);
     setErrors({});
     try {
-      await authRequestOtp(phone.trim(), 'register');
-      setPendingReg({ name: name.trim(), phone: phone.trim(), password, type: 'register' });
+      const res = await authRegister(name.trim(), email.trim(), password);
+      await setAuth(res.user, res.access_token);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.push('/verify-otp');
+      router.replace('/');
     } catch (err: any) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = err?.response?.data?.detail ?? err?.message ?? 'Could not send OTP. Try again.';
+      const raw = err?.detail || err?.response?.data?.detail || err?.message || '';
+      const msg = (raw && !raw.startsWith('API error')) ? raw : 'Registration failed. Please try again.';
       setErrors({ general: String(msg) });
     } finally {
       setLoading(false);
@@ -234,23 +235,21 @@ export default function RegisterScreen() {
               onChangeText={(t) => { setName(t); setErrors((e) => ({ ...e, name: undefined as any })); }}
               autoCapitalize="words"
               returnKeyType="next"
-              onSubmitEditing={() => phoneRef.current?.focus()}
+              onSubmitEditing={() => emailRef.current?.focus()}
               error={errors.name}
               autoFocus
             />
 
             <FloatingLabelInput
-              label="Mobile number"
-              value={phone}
-              onChangeText={(t) => { setPhone(t.replace(/\D/g, '')); setErrors((e) => ({ ...e, phone: undefined as any })); }}
-              keyboardType="phone-pad"
-              autoComplete="tel"
+              label="Email address"
+              value={email}
+              onChangeText={(t) => { setEmail(t.trim()); setErrors((e) => ({ ...e, email: undefined as any })); }}
+              keyboardType="email-address"
+              autoComplete="email"
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
-              maxLength={10}
-              prefix="+91"
-              error={errors.phone}
-              inputRef={phoneRef}
+              error={errors.email}
+              inputRef={emailRef}
             />
 
             <FloatingLabelInput
@@ -276,31 +275,24 @@ export default function RegisterScreen() {
               onChangeText={(t) => { setConfirm(t); setErrors((e) => ({ ...e, confirm: undefined as any })); }}
               secureTextEntry={!showPass}
               returnKeyType="done"
-              onSubmitEditing={handleSendOtp}
+              onSubmitEditing={handleRegister}
               error={errors.confirm}
               inputRef={confirmRef}
             />
           </Animated.View>
 
-          {/* OTP notice */}
-          <Animated.View entering={FadeInDown.duration(440).delay(200)} style={s.otpNotice}>
-            <Text style={s.otpNoticeText}>
-              We'll send a 6-digit OTP to verify your mobile number
-            </Text>
-          </Animated.View>
-
           {/* CTA */}
-          <Animated.View entering={FadeInDown.duration(440).delay(240)} style={{ marginBottom: 24 }}>
+          <Animated.View entering={FadeInDown.duration(440).delay(200)} style={{ marginBottom: 24, marginTop: 8 }}>
             <Animated.View style={btnStyle}>
               <TouchableOpacity
                 style={[s.btn, loading && s.btnLoading]}
-                onPress={handleSendOtp}
+                onPress={handleRegister}
                 onPressIn={() => { btnScale.value = withSpring(0.97, { damping: 20, stiffness: 300 }); }}
                 onPressOut={() => { btnScale.value = withSpring(1,    { damping: 20, stiffness: 300 }); }}
                 disabled={loading}
                 activeOpacity={0.9}
               >
-                <Text style={s.btnText}>{loading ? 'Sending OTP…' : 'Send OTP  →'}</Text>
+                <Text style={s.btnText}>{loading ? 'Creating account…' : 'Create account  →'}</Text>
               </TouchableOpacity>
             </Animated.View>
           </Animated.View>
@@ -336,9 +328,6 @@ const s = StyleSheet.create({
   errorBanner:  { backgroundColor: 'rgba(194,59,34,0.08)', borderRadius: RADIUS.md, borderWidth: 1, borderColor: 'rgba(194,59,34,0.2)', padding: 14, marginBottom: 16 },
   errorBannerText: { ...TYPE.bodySmall, color: COLORS.crimson, lineHeight: 20 },
   showHide:     { ...TYPE.bodySmall, color: COLORS.sage, fontWeight: '700' },
-
-  otpNotice: { backgroundColor: COLORS.sageGhost, borderRadius: RADIUS.md, padding: 14, borderWidth: 1, borderColor: 'rgba(58,95,82,0.2)', marginBottom: 20 },
-  otpNoticeText: { ...TYPE.bodySmall, color: COLORS.sage, textAlign: 'center', lineHeight: 20 },
 
   btn:        { backgroundColor: COLORS.ink, borderRadius: RADIUS.xl, paddingVertical: 20, alignItems: 'center', shadowColor: COLORS.ink, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 14, elevation: 8 },
   btnLoading: { backgroundColor: COLORS.inkSoft },

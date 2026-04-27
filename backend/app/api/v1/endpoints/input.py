@@ -283,6 +283,8 @@ async def submit_voice(
             transcript=transcript,
             detected_language=detected_lang,
             confidence=round(confidence, 3),
+            english_transcript=english_transcript if detected_lang != "en" else None,
+            translation_method=translation_method if detected_lang != "en" else None,
         )
 
     finally:

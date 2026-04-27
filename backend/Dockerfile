@@ -18,10 +18,22 @@ COPY requirements.txt .
 # which is needed to pull the PyTorch CPU-only wheels.
 RUN pip install --no-cache-dir \
     --extra-index-url https://download.pytorch.org/whl/cpu \
+    --timeout 120 \
+    --retries 5 \
     -r requirements.txt
 
 # Download spaCy model (en_core_web_sm — used by extractor.py NER pass)
 RUN python -m spacy download en_core_web_sm
+
+# Pin HuggingFace cache to a fixed path inside the image.
+# Without this, the bake runs as root → /root/.cache/, but the container runs
+# as vaidya (non-root) → different home → model not found → cold download on
+# every container start. /app/whisper_cache is readable by all users.
+ENV HF_HOME=/app/whisper_cache
+
+# Pre-bake Whisper tiny into the image (~80MB int8 CTranslate2 format).
+# Runs at build time under HF_HOME above; runtime uses the same ENV path.
+RUN python -c "from faster_whisper import WhisperModel; WhisperModel('tiny', device='cpu', compute_type='int8')"
 
 # Models are downloaded into the Cloud Build workspace by cloudbuild.yaml
 # and copied here from the build context
@@ -56,4 +68,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD exec gunicorn app.main:app -k uvicorn.workers.UvicornWorker -w 1 --bind "0.0.0.0:${PORT:-8000}" --timeout 300
+CMD ["gunicorn", "app.main:app", "-k", "uvicorn.workers.UvicornWorker", "-w", "1", "--bind", "0.0.0.0:8000", "--timeout", "300"]

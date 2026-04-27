@@ -24,6 +24,7 @@
  *        work was done.  Steps now advance as work actually completes.
  */
 
+import { Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useAppStore } from '@/store';
 import { triageText, triageMultimodal } from '@/services/api';
@@ -308,7 +309,12 @@ export function useTriage() {
 
     } catch (err: any) {
       console.error('[useTriage] error:', err);
+      const msg: string =
+        err?.message?.includes('No recognisable symptoms')
+          ? err.message
+          : 'Analysis could not be completed. Please check your connection and try again.';
       router.replace('/');
+      Alert.alert('Analysis failed', msg, [{ text: 'OK' }]);
     } finally {
       store.setIsAnalysing(false);
     }

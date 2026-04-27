@@ -25,6 +25,44 @@ logger = structlog.get_logger(__name__)
 DISEASE_DESCRIPTIONS: dict[str, str] = {}
 DISEASE_PRECAUTIONS: dict[str, list[str]] = {}
 
+# Hardcoded fallback precautions — used when CSV files are unavailable in deployment
+FALLBACK_PRECAUTIONS: dict[str, list[str]] = {
+    "Fungal infection":                ["Keep skin dry and clean", "Use prescribed antifungal cream", "Avoid sharing clothes or towels", "Wear breathable cotton clothing"],
+    "Allergy":                         ["Identify and avoid your triggers", "Take prescribed antihistamines", "Wash hands and face after going outside", "Keep windows closed during high pollen season"],
+    "GERD":                            ["Avoid spicy, oily, and acidic foods", "Eat smaller, more frequent meals", "Do not lie down within 2 hours of eating", "Elevate your head while sleeping"],
+    "Drug Reaction":                   ["Stop the suspected drug immediately and consult a doctor", "Note all medications you have taken", "Carry a drug allergy card", "Do not take the drug again without doctor advice"],
+    "Peptic ulcer diseae":             ["Avoid spicy and acidic foods", "Do not skip meals", "Avoid NSAIDs and aspirin without a doctor", "Reduce stress and avoid alcohol"],
+    "Diabetes":                        ["Monitor blood sugar regularly", "Follow a low-sugar, balanced diet", "Exercise for 30 minutes daily", "Take medications as prescribed and attend check-ups"],
+    "Gastroenteritis":                 ["Drink ORS (oral rehydration solution) frequently", "Avoid solid food until vomiting stops", "Wash hands thoroughly before eating", "Avoid dairy products until fully recovered"],
+    "Bronchial Asthma":                ["Keep your reliever inhaler accessible at all times", "Avoid smoke, dust, and pollen", "Do not exercise in cold dry air", "Follow your prescribed inhaler routine daily"],
+    "Hypertension":                    ["Reduce salt intake significantly", "Exercise regularly and maintain a healthy weight", "Monitor blood pressure daily", "Avoid alcohol and smoking"],
+    "Migraine":                        ["Rest immediately in a dark, quiet room", "Apply a cold or warm compress to your forehead", "Stay well hydrated", "Keep a diary to identify your personal triggers"],
+    "Jaundice":                        ["Rest completely and avoid all physical exertion", "Drink plenty of clean fluids", "Avoid fatty foods and alcohol completely", "Seek medical review to identify the cause"],
+    "Malaria":                         ["Complete the full course of antimalarial medication", "Sleep under a mosquito net every night", "Apply insect repellent on exposed skin", "Remove stagnant water around your home"],
+    "Chicken pox":                     ["Keep skin cool and dry", "Do not scratch — it spreads the rash and causes scarring", "Apply calamine lotion for itch relief", "Isolate from unvaccinated or pregnant individuals"],
+    "Dengue":                          ["Rest and drink plenty of fluids, including ORS", "Take paracetamol only — avoid aspirin and ibuprofen", "Monitor platelet count daily", "Use mosquito nets and repellents"],
+    "Typhoid":                         ["Drink only boiled or sealed bottled water", "Complete the full prescribed antibiotic course", "Eat freshly cooked food only — avoid raw vegetables", "Practice strict hand hygiene"],
+    "Hepatitis A":                     ["Rest and avoid alcohol completely", "Drink only clean, boiled water", "Eat light, easily digestible food", "Do not share utensils, towels, or personal items"],
+    "Hepatitis B":                     ["Take prescribed antiviral medications regularly", "Avoid alcohol completely", "Practice safe sex", "Get close contacts vaccinated against hepatitis B"],
+    "Tuberculosis":                    ["Complete the full 6-month treatment — do not stop early", "Cover your mouth and nose when coughing or sneezing", "Ventilate your living space with fresh air daily", "Get household contacts tested and vaccinated"],
+    "Common Cold":                     ["Rest and drink plenty of warm fluids", "Use saline nasal drops to relieve congestion", "Take steam inhalation twice a day", "Avoid cold beverages and exposure to cold air"],
+    "Pneumonia":                       ["Complete the full antibiotic course even when feeling better", "Rest completely and drink plenty of fluids", "Avoid smoking", "Follow up with a chest X-ray after treatment"],
+    "Heart attack":                    ["Call 108 immediately — every minute matters", "Chew a regular aspirin (325 mg) if not allergic", "Rest in a comfortable position while waiting for help", "Do not eat or drink anything"],
+    "Urinary tract infection":         ["Drink at least 2 litres of water daily", "Complete the full antibiotic course", "Urinate frequently — do not hold it in", "Maintain personal hygiene and wear cotton underwear"],
+    "Hypothyroidism":                  ["Take thyroid medication at the same time every morning on an empty stomach", "Avoid eating for 30 minutes after your tablet", "Get thyroid levels tested every 3–6 months", "Eat a balanced diet — avoid excessive iodine or soy"],
+    "Hyperthyroidism":                 ["Take prescribed antithyroid medication consistently", "Avoid iodine-rich foods (seaweed, iodised salt)", "Rest and reduce stress", "Attend regular thyroid function tests"],
+    "Osteoarthritis":                  ["Exercise gently — swimming and walking are best", "Maintain a healthy weight to reduce joint stress", "Apply hot or cold packs for pain relief", "Avoid high-impact activities like running"],
+    "Arthritis":                       ["Do gentle range-of-motion exercises daily", "Apply warm or cold packs to affected joints", "Take prescribed anti-inflammatory medications", "Maintain a healthy weight"],
+    "Dimorphic hemmorhoids(piles)":    ["Eat a high-fibre diet with plenty of vegetables", "Drink at least 2 litres of water daily", "Do not strain during bowel movements", "Apply ice pack to relieve pain and swelling"],
+    "Varicose veins":                  ["Elevate your legs above heart level when resting", "Avoid prolonged standing or sitting", "Wear compression stockings during the day", "Walk regularly to improve circulation"],
+    "psoriasis":                       ["Moisturise affected skin twice daily", "Avoid skin injuries and scratching", "Use prescribed topical treatments as directed", "Reduce stress through yoga or meditation"],
+    "Impetigo":                        ["Keep the affected area clean and dry", "Apply prescribed antibiotic cream as directed", "Do not scratch or touch the sores", "Wash hands frequently and avoid sharing towels"],
+    "Cervical spondylosis":            ["Do gentle neck exercises daily", "Avoid prolonged screen time without breaks", "Use a supportive, low pillow while sleeping", "Apply a warm heat pack to the neck for pain relief"],
+    "Paralysis (brain hemorrhage)":    ["Call 108 emergency immediately", "Do not move the patient — keep them still", "Note the exact time symptoms started", "Keep the airway clear and monitor breathing"],
+    "Brain Hemorrhage":                ["Call 108 emergency immediately", "Do not give food or water", "Keep the patient still and calm", "Monitor breathing and consciousness until help arrives"],
+    "Alcoholic hepatitis":             ["Stop consuming alcohol immediately and completely", "Follow a doctor-prescribed nutritional plan", "Take prescribed medications consistently", "Attend regular liver function tests"],
+}
+
 
 @lru_cache(maxsize=1)
 def _load_model():
@@ -154,7 +192,7 @@ async def run_classifier(symptom_vector: dict[str, int]) -> DiagnosisResult:
             vec[i] = 1
 
     # Run blocking predict_proba in thread pool (doesn't block async event loop)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     proba = await loop.run_in_executor(
         None, model.predict_proba, vec.reshape(1, -1)
     )
@@ -200,6 +238,15 @@ async def run_classifier(symptom_vector: dict[str, int]) -> DiagnosisResult:
         differential_count=len(differential),
     )
 
+    precautions = (
+        DISEASE_PRECAUTIONS.get(primary_disease)
+        or FALLBACK_PRECAUTIONS.get(primary_disease)
+        or ["Consult a licensed doctor for a confirmed diagnosis",
+            "Rest and stay well hydrated",
+            "Monitor your symptoms and seek care if they worsen",
+            "Call 108 if you experience sudden or severe symptoms"]
+    )
+
     return DiagnosisResult(
         primary_diagnosis=primary_disease,
         confidence=primary_confidence,
@@ -207,7 +254,7 @@ async def run_classifier(symptom_vector: dict[str, int]) -> DiagnosisResult:
         diagnosis_source="xgboost",
         red_flags=red_flags,
         description=DISEASE_DESCRIPTIONS.get(primary_disease),
-        precautions=DISEASE_PRECAUTIONS.get(primary_disease, []),
+        precautions=precautions,
     )
 
 
@@ -228,8 +275,8 @@ def _detect_red_flags(symptom_vector: dict[str, int]) -> list[str]:
     if sv.get("high_fever") and sv.get("stiff_neck"):
         flags.append("High fever + stiff neck — possible meningitis")
 
-    if sv.get("sudden_severe_headache"):
-        flags.append("Sudden severe headache — possible subarachnoid haemorrhage")
+    if sv.get("headache") and sv.get("altered_sensorium"):
+        flags.append("Headache with altered sensorium — possible neurological emergency")
 
     if sv.get("coughing_of_blood") or sv.get("blood_in_sputum"):
         flags.append("Haemoptysis (blood in cough/sputum) detected")

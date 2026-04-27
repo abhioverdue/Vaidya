@@ -9,6 +9,7 @@ import { STORAGE_KEYS } from '@/constants';
 import { saveLanguage } from '@/i18n';
 import type { FullTriageResponse, Language, OfflinePrediction, TriageSession } from '@/types';
 import type { AuthUser } from '@/services/auth';
+import { authSignOut } from '@/services/auth';
 
 // ── App slice ──────────────────────────────────────────────────────────────────
 interface AppState {
@@ -62,11 +63,13 @@ interface PatientState {
 // ── Auth slice ─────────────────────────────────────────────────────────────────
 export interface PendingRegistration {
   name:     string;
-  phone:    string;
+  email:    string;
   password: string;
   type:     'register' | 'reset';
   /** The OTP the user successfully verified — stored so reset-password can forward it to the backend */
   otp?:     string;
+  /** OTP returned by backend when SMS delivery is unavailable (null when real SMS was sent) */
+  demo_otp?: string | null;
 }
 
 interface AuthState {
@@ -138,6 +141,17 @@ export const useAppStore = create<AppState & SessionState & PatientState & AuthS
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(updated));
     } catch {}
+    // Mirror to Firestore when signed in — imported lazily to avoid a
+    // module-level crash before React mounts
+    const uid = get().user?.id;
+    if (uid && !uid.startsWith('demo-')) {
+      try {
+        const { saveSessionToFirestore, incrementSessionCounter } =
+          require('@/services/firestore') as typeof import('@/services/firestore');
+        saveSessionToFirestore(uid, session);
+        incrementSessionCounter();
+      } catch {}
+    }
   },
 
   loadHistory: async () => {
@@ -199,6 +213,7 @@ export const useAppStore = create<AppState & SessionState & PatientState & AuthS
   setPendingReg: (data) => set({ pendingReg: data }),
 
   logout: async () => {
+    await authSignOut();
     set({
       user:            null,
       token:           null,

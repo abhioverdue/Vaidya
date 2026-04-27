@@ -19,17 +19,20 @@ const defaultAssetExts  = config.resolver?.assetExts  ?? [];
 // Register ML model formats as binary assets so require() returns an asset
 // reference (used by expo-asset). Without this Metro tries to parse them as
 // JS source files and throws "Unable to resolve module".
+//
+// Mutate config.resolver directly instead of spreading it.  In Expo SDK 51
+// the resolver object may have getter-defined properties; spreading loses
+// those and silently reverts assetExts to Metro's internal defaults, so
+// .onnx / .tflite files end up parsed as JS source and their binary content
+// leaks into the module value (causing the "missing from asset registry" error).
 const modelAssetExts = ['onnx', 'tflite', 'bin', 'pb'];
-const mergedAssetExts = [
+config.resolver.assetExts = [
   ...defaultAssetExts.filter((e) => !modelAssetExts.includes(e)),
   ...modelAssetExts,
 ];
+config.resolver.sourceExts = defaultSourceExts;
 
-config.resolver = {
-  ...config.resolver,
-  sourceExts: defaultSourceExts,
-  assetExts: mergedAssetExts,
-  resolveRequest: (context, moduleName, platform) => {
+config.resolver.resolveRequest = (context, moduleName, platform) => {
     // Fix @expo/metro-runtime bug: Library → Libraries
     if (moduleName.startsWith('react-native/Library/')) {
       const fixed = moduleName.replace('react-native/Library/', 'react-native/Libraries/');
@@ -66,7 +69,6 @@ config.resolver = {
     }
 
     return context.resolveRequest(context, moduleName, platform);
-  },
-};
+  };
 
 module.exports = config;

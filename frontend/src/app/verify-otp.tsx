@@ -6,7 +6,7 @@
 
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, Alert,
+  KeyboardAvoidingView, Platform, Alert, useWindowDimensions,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import Animated, {
   FadeInDown, FadeIn,
   useSharedValue, useAnimatedStyle,
   withSpring, withTiming, withSequence,
+  cancelAnimation,
   Easing,
 } from 'react-native-reanimated';
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -30,6 +31,11 @@ const OTP_LENGTH = 6;
 function OtpBox({
   value, focused, hasError,
 }: { value: string; focused: boolean; hasError: boolean }) {
+  const { width: screenW } = useWindowDimensions();
+  // Fit 6 boxes + 5 gaps of 10px within the screen minus horizontal padding (28*2=56)
+  const boxW = Math.max(36, Math.floor((screenW - 56 - 50) / 6));
+  const boxH = Math.floor(boxW * 1.2);
+
   const scale = useSharedValue(1);
 
   useEffect(() => {
@@ -38,8 +44,15 @@ function OtpBox({
         withSpring(1.15, { damping: 15, stiffness: 400 }),
         withSpring(1,    { damping: 12, stiffness: 300 }),
       );
+    } else {
+      cancelAnimation(scale);
+      scale.value = 1;
     }
   }, [value]);
+
+  useEffect(() => {
+    return () => { cancelAnimation(scale); };
+  }, []);
 
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
@@ -60,13 +73,13 @@ function OtpBox({
   return (
     <Animated.View
       style={[
-        ob.box,
+        { width: boxW, height: boxH, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
         { borderColor, backgroundColor: bg, borderWidth: focused || value ? 2 : 1.5 },
         animStyle,
       ]}
     >
       {value ? (
-        <Text style={ob.digit}>{value}</Text>
+        <Text style={[ob.digit, { fontSize: Math.floor(boxW * 0.5) }]}>{value}</Text>
       ) : focused ? (
         <View style={ob.cursor} />
       ) : null}
@@ -75,8 +88,7 @@ function OtpBox({
 }
 
 const ob = StyleSheet.create({
-  box:    { width: 48, height: 58, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center' },
-  digit:  { fontSize: 24, fontWeight: '700', color: COLORS.ink, letterSpacing: -0.5 },
+  digit:  { fontWeight: '700', color: COLORS.ink, letterSpacing: -0.5 },
   cursor: { width: 2, height: 24, backgroundColor: COLORS.sage, borderRadius: 1 },
 });
 
@@ -137,8 +149,10 @@ export default function VerifyOtpScreen() {
   const otp = digits.join('');
 
   // Auto-submit when all boxes filled
+  // otp is a joined string — otp.length === 6 is sufficient because each slot
+  // only accepts 1 digit; an empty slot makes the string shorter than OTP_LENGTH.
   useEffect(() => {
-    if (otp.length === OTP_LENGTH && !otp.includes('')) {
+    if (otp.length === OTP_LENGTH) {
       handleVerify();
     }
   }, [otp]);
@@ -195,13 +209,17 @@ export default function VerifyOtpScreen() {
     setHasError(false);
     setErrorMsg('');
     try {
-      const res = await authVerifyOtp(pendingReg?.phone ?? '', otp);
+      const res = await authVerifyOtp(pendingReg?.email ?? '', otp);
       if (!res.valid) {
         setHasError(true);
         setErrorMsg(res.message || 'Invalid OTP. Please check and try again.');
         triggerShake();
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         setLoading(false);
+        // Clear all boxes so user can re-enter cleanly without fighting auto-submit
+        setDigits(Array(OTP_LENGTH).fill(''));
+        setFocusIdx(0);
+        setTimeout(() => refs.current[0]?.focus(), 120);
         return;
       }
 
@@ -209,7 +227,7 @@ export default function VerifyOtpScreen() {
         // Complete registration
         const authRes = await authRegister(
           pendingReg.name,
-          pendingReg.phone,
+          pendingReg.email,
           pendingReg.password,
         );
         await setAuth(authRes.user, authRes.access_token);
@@ -244,15 +262,14 @@ export default function VerifyOtpScreen() {
     refs.current[0]?.focus();
     setFocusIdx(0);
     try {
-      await authRequestOtp(pendingReg.phone, pendingReg.type === 'register' ? 'register' : 'reset');
+      const res = await authRequestOtp(pendingReg.email, pendingReg.type === 'register' ? 'register' : 'reset');
+      // Update the hint box with the fresh OTP — old code is now invalid
+      setPendingReg({ ...pendingReg, demo_otp: res.demo_otp ?? null });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {}
   }
 
-  const phone = pendingReg?.phone ?? '';
-  const maskedPhone = phone.length === 10
-    ? `+91 ${phone.slice(0, 2)}••••${phone.slice(-4)}`
-    : phone;
+  const maskedPhone = pendingReg?.email ?? '';
 
   return (
     <SafeAreaView style={s.safe}>
@@ -277,11 +294,13 @@ export default function VerifyOtpScreen() {
             </Text>
           </Animated.View>
 
-          {/* Demo hint */}
-          <Animated.View entering={FadeIn.duration(440).delay(120)} style={s.demoBox}>
-            <Text style={s.demoBoxText}>Demo mode: use code{' '}</Text>
-            <Text style={s.demoCode}>123456</Text>
-          </Animated.View>
+          {/* Show OTP inline only when SMS delivery is unavailable */}
+          {pendingReg?.demo_otp && (
+            <View style={s.demoBox}>
+              <Text style={s.demoBoxText}>SMS unavailable — your code:{' '}</Text>
+              <Text style={s.demoCode}>{pendingReg.demo_otp}</Text>
+            </View>
+          )}
 
           {/* OTP boxes */}
           <Animated.View
@@ -325,15 +344,15 @@ export default function VerifyOtpScreen() {
           <Animated.View entering={FadeInDown.duration(440).delay(260)} style={{ width: '100%' }}>
             <Animated.View style={btnStyle}>
               <TouchableOpacity
-                style={[s.btn, (loading || otp.length < OTP_LENGTH) && s.btnDisabled]}
+                style={[s.btn, loading && s.btnDisabled]}
                 onPress={handleVerify}
                 onPressIn={() => { btnScale.value = withSpring(0.97, { damping: 20, stiffness: 300 }); }}
                 onPressOut={() => { btnScale.value = withSpring(1,    { damping: 20, stiffness: 300 }); }}
-                disabled={loading || otp.length < OTP_LENGTH}
+                disabled={loading}
                 activeOpacity={0.9}
               >
                 <Text style={s.btnText}>
-                  {loading ? 'Verifying…' : 'Verify  →'}
+                  {loading ? 'Verifying…' : 'Verify →'}
                 </Text>
               </TouchableOpacity>
             </Animated.View>

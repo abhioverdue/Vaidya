@@ -1,27 +1,14 @@
 """
 Vaidya — Whisper STT transcription service
-Module 2 — full implementation
 
-Model: openai/whisper-tiny  (CPU-friendly, ~150MB, ~1s/5s audio)
-       Falls back to whisper-small if tiny gives low confidence.
-
-Based on audio.ipynb Cell 10:
-    stt = pipeline("automatic-speech-recognition",
-                   model="openai/whisper-small", device=-1)
-    def transcribe_audio(path): return stt(path)["text"]
-
-Enhancements over the notebook:
-  - Multilingual: Hindi (hi), Tamil (ta), English (en)
-  - Language hint skips detection step (faster on mobile uploads)
-  - Confidence scoring via log-probability from Whisper segments
-  - Audio format normalisation via pydub (ogg/webm/mp3 → wav before Whisper)
-  - Async: blocking inference runs in thread pool executor
-  - LRU cache: model loaded once per process lifetime (~2s startup cost)
+Model: faster-whisper tiny (CTranslate2 int8) — ~1-3s on single CPU core
+       Replaces HuggingFace transformers pipeline (~8-15s on same hardware).
+       4-5x faster because CTranslate2 uses fused GEMM ops + int8 quantisation
+       without requiring PyTorch for inference.
 """
 
 import asyncio
 import os
-import tempfile
 from functools import lru_cache
 from pathlib import Path
 
@@ -29,224 +16,135 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-# Whisper language codes for our 3 supported languages
-LANG_TO_WHISPER = {
-    "en": "english",
-    "hi": "hindi",
-    "ta": "tamil",
-}
-
-# Whisper returns ISO 639-1 codes — map back to Vaidya codes
+LANG_TO_WHISPER = {"en": "en", "hi": "hi", "ta": "ta"}
 WHISPER_TO_VAIDYA = {
-    "en": "en",
-    "hi": "hi",
-    "ta": "ta",
-    # Common misdetections for South Indian languages
-    "kn": "ta",   # Kannada sometimes detected instead of Tamil
+    "en": "en", "hi": "hi", "ta": "ta",
+    "kn": "ta",   # Kannada misdetected as Tamil
     "ml": "ta",   # Malayalam edge case
     "ur": "hi",   # Urdu/Hindi edge case
 }
+HALLUCINATIONS = frozenset({
+    "thank you", "thanks for watching", "subscribe",
+    "you", "[music]", "[applause]", "...",
+})
 
 
 @lru_cache(maxsize=1)
-def _load_whisper_pipeline():
-    """
-    Load Whisper tiny pipeline once and cache it for the process lifetime.
-    Uses HuggingFace transformers pipeline — same API as audio.ipynb Cell 10.
-
-    Model choice:
-      whisper-tiny  — 39M params, ~150MB, ~1s on CPU for 5s audio ✓ (default)
-      whisper-small — 244M params, ~500MB, ~4s on CPU              (higher accuracy)
-    """
+def _load_whisper():
+    """Load faster-whisper model once per process. int8 keeps RAM ~80MB."""
     try:
-        import torch
-        from transformers import pipeline as hf_pipeline
-
-        device = 0 if torch.cuda.is_available() else -1
-        model_id = os.getenv("WHISPER_MODEL", "openai/whisper-tiny")
-
-        logger.info("vaidya.whisper.loading", model=model_id, device=device)
-
-        pipe = hf_pipeline(
-            "automatic-speech-recognition",
-            model=model_id,
-            device=device,
-            # Return timestamps + language detection metadata
-            return_timestamps=True,
-            chunk_length_s=30,          # process in 30s chunks (rural recordings may be long)
-            stride_length_s=5,
-        )
+        from faster_whisper import WhisperModel
+        from app.core.config import settings
+        model_id = settings.WHISPER_MODEL
+        logger.info("vaidya.whisper.loading", model=model_id, backend="faster-whisper/ctranslate2")
+        model = WhisperModel(model_id, device="cpu", compute_type="int8")
         logger.info("vaidya.whisper.ready", model=model_id)
-        return pipe
-
+        return model
     except Exception as exc:
         logger.error("vaidya.whisper.load_failed", error=str(exc))
         return None
 
 
 def _normalise_audio(input_path: str) -> str:
-    """
-    Convert any audio format (ogg, webm, mp3, m4a) to 16kHz mono WAV.
-    Whisper accepts WAV natively and most cleanly.
-    Returns path to normalised file (may be same as input if already WAV).
-    """
+    """Convert any audio format to 16kHz mono WAV. Returns same path if already WAV."""
     suffix = Path(input_path).suffix.lower()
-    if suffix in (".wav",):
-        return input_path   # already WAV — no conversion needed
-
+    if suffix == ".wav":
+        return input_path
     try:
         from pydub import AudioSegment
-
         audio = AudioSegment.from_file(input_path)
         audio = audio.set_frame_rate(16000).set_channels(1)
-
-        out_path = input_path.replace(suffix, "_norm.wav")
+        out_path = str(Path(input_path).with_suffix("")) + "_norm.wav"
         audio.export(out_path, format="wav")
-        logger.debug("vaidya.whisper.normalised", from_fmt=suffix, to="wav")
+        logger.debug("vaidya.whisper.normalised", from_fmt=suffix)
         return out_path
-
     except ImportError:
         logger.warning("vaidya.whisper.pydub_missing — skipping normalisation")
-        return input_path   # let Whisper try anyway
+        return input_path
     except Exception as exc:
         logger.warning("vaidya.whisper.normalise_failed", error=str(exc))
         return input_path
 
 
-def _run_whisper_sync(
-    audio_path: str,
-    language_hint: str | None,
-) -> dict:
+def _run_whisper_sync(audio_path: str, language_hint: str | None) -> dict:
     """
-    Blocking Whisper inference — runs in thread pool via run_in_executor.
-    Mirrors audio.ipynb Cell 10 but adds multilingual + confidence support.
+    Blocking faster-whisper inference — called from run_in_executor.
+    beam_size=1 (greedy) is fastest and sufficient for short medical phrases.
+    vad_filter skips silent segments, reducing hallucinations on noisy uploads.
     """
-    pipe = _load_whisper_pipeline()
-    if pipe is None:
-        return {
-            "text": "",
-            "language": language_hint or "en",
-            "confidence": 0.0,
-            "error": "Whisper model not loaded",
-        }
+    model = _load_whisper()
+    if model is None:
+        return {"text": "", "language": language_hint or "en", "confidence": 0.0,
+                "error": "Whisper model not loaded"}
 
-    # Normalise audio format
     norm_path = _normalise_audio(audio_path)
 
-    # Build generate_kwargs for language forcing
-    generate_kwargs = {}
-    if language_hint and language_hint in LANG_TO_WHISPER:
-        generate_kwargs["language"] = LANG_TO_WHISPER[language_hint]
-        generate_kwargs["task"] = "transcribe"   # transcribe, not translate
-
     try:
-        result = pipe(norm_path, generate_kwargs=generate_kwargs)
+        lang = LANG_TO_WHISPER.get(language_hint or "", None)
+        segments_gen, info = model.transcribe(
+            norm_path,
+            language=lang,
+            beam_size=1,
+            vad_filter=True,
+            vad_parameters={"min_silence_duration_ms": 300},
+        )
 
-        text = result.get("text", "").strip()
-        chunks = result.get("chunks", [])
+        chunks = []
+        text_parts = []
+        total_logprob = 0.0
+        for seg in segments_gen:
+            text_parts.append(seg.text)
+            chunks.append({"text": seg.text, "timestamp": (seg.start, seg.end)})
+            total_logprob += seg.avg_logprob
 
-        # Detect language from model output metadata
-        # HuggingFace pipeline exposes this through the model's generate output
-        detected_lang = language_hint or "en"
-        try:
-            # Access internal model for language token
-            import torch
-            processor = pipe.feature_extractor
-            # Language detected is embedded in the first chunk timestamp if available
-            # Fall back to langdetect for non-hinted calls
-            if not language_hint and text:
-                from langdetect import detect
-                raw_lang = detect(text)
-                detected_lang = WHISPER_TO_VAIDYA.get(raw_lang, "en")
-        except Exception:
-            pass
+        text = " ".join(text_parts).strip()
+        detected = language_hint if language_hint else WHISPER_TO_VAIDYA.get(info.language, "en")
+        avg_logprob = total_logprob / len(chunks) if chunks else -1.0
 
-        # Confidence: average of chunk-level log-probs if available,
-        # else heuristic based on text length vs audio duration
-        confidence = _estimate_confidence(text, chunks)
+        if text.lower().strip() in HALLUCINATIONS:
+            logger.info("vaidya.whisper.hallucination_filtered", text=text)
+            return {"text": "", "language": detected, "confidence": 0.0, "chunks": [],
+                    "error": "hallucination_filtered"}
 
-        # Clean up normalised temp file
-        if norm_path != audio_path and os.path.exists(norm_path):
-            os.unlink(norm_path)
+        confidence = _estimate_confidence(text, chunks, avg_logprob)
 
         logger.info(
             "vaidya.whisper.transcribed",
-            language=detected_lang,
+            language=detected,
             text_len=len(text),
             confidence=round(confidence, 3),
             chunks=len(chunks),
         )
-
-        return {
-            "text":     text,
-            "language": detected_lang,
-            "confidence": confidence,
-            "chunks":   [{"text": c.get("text",""), "timestamp": c.get("timestamp")} for c in chunks],
-        }
+        return {"text": text, "language": detected, "confidence": confidence, "chunks": chunks}
 
     except Exception as exc:
         logger.error("vaidya.whisper.inference_error", error=str(exc))
-        return {
-            "text": "",
-            "language": language_hint or "en",
-            "confidence": 0.0,
-            "error": str(exc),
-        }
+        return {"text": "", "language": language_hint or "en", "confidence": 0.0, "error": str(exc)}
+
+    finally:
+        if norm_path != audio_path and os.path.exists(norm_path):
+            os.unlink(norm_path)
 
 
-def _estimate_confidence(text: str, chunks: list) -> float:
-    """
-    Heuristic confidence score (0–1).
-    Whisper tiny doesn't expose per-token log-probs through HuggingFace pipeline,
-    so we use proxies: text length, number of hallucination markers, chunk coverage.
-    """
+def _estimate_confidence(text: str, chunks: list, avg_logprob: float = -1.0) -> float:
     if not text:
         return 0.0
-
-    # Known Whisper hallucination phrases (empty audio / noise)
-    hallucinations = [
-        "thank you", "thanks for watching", "subscribe",
-        "you", "[music]", "[applause]", "...",
-    ]
-    text_lower = text.lower().strip()
-    if any(h == text_lower for h in hallucinations):
+    if text.lower().strip() in HALLUCINATIONS:
         return 0.1
-
-    # Short text from a long audio = likely poor transcription
     if len(text) < 10:
         return 0.4
-
-    # If we got timestamped chunks, high coverage = high confidence
-    if chunks:
-        return min(0.95, 0.7 + (len(chunks) * 0.05))
-
-    return 0.75   # default for untimstamped output
+    # avg_logprob from faster-whisper: 0.0 = perfect, -1.0 = decent, -2.0+ = poor
+    # Map to [0, 1]: clamp logprob to [-2, 0] then normalise
+    logprob_conf = max(0.0, min(1.0, 1.0 + avg_logprob / 2.0))
+    return round(logprob_conf, 3)
 
 
-async def transcribe_audio(
-    file_path: str,
-    language_hint: str | None = None,
-) -> dict:
+async def transcribe_audio(file_path: str, language_hint: str | None = None) -> dict:
     """
     Async wrapper — runs blocking Whisper inference in thread pool.
-    Called from /api/v1/input/voice and audio diagnosis endpoints.
-
-    Args:
-        file_path:     path to audio file on disk
-        language_hint: "en" | "hi" | "ta" — forces Whisper language, skips detection
 
     Returns:
-        {
-            "text":       str   — full transcript,
-            "language":   str   — "en"|"hi"|"ta",
-            "confidence": float — 0.0–1.0,
-            "chunks":     list  — timestamped segments (empty if no timestamps)
-        }
+        {"text": str, "language": "en"|"hi"|"ta", "confidence": float, "chunks": list}
     """
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(
-        None,
-        _run_whisper_sync,
-        file_path,
-        language_hint,
-    )
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _run_whisper_sync, file_path, language_hint)

@@ -116,11 +116,11 @@ const fi = StyleSheet.create({
 export default function LoginScreen() {
   const setAuth = useAppStore((s) => s.setAuth);
 
-  const [phone,    setPhone]    = useState('');
+  const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading,  setLoading]  = useState(false);
-  const [errors,   setErrors]   = useState<{ phone?: string; password?: string; general?: string }>({});
+  const [errors,   setErrors]   = useState<{ email?: string; password?: string; general?: string }>({});
 
   const passwordRef = useRef<TextInput>(null);
 
@@ -129,10 +129,10 @@ export default function LoginScreen() {
 
   function validate(): boolean {
     const e: typeof errors = {};
-    if (!phone.trim())                       e.phone    = 'Enter your mobile number';
-    else if (!/^\d{10}$/.test(phone.trim())) e.phone    = 'Enter a valid 10-digit number';
-    if (!password)                           e.password = 'Enter your password';
-    else if (password.length < 6)            e.password = 'Password must be at least 6 characters';
+    if (!email.trim())                                          e.email    = 'Enter your email address';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email   = 'Enter a valid email address';
+    if (!password)                                              e.password = 'Enter your password';
+    else if (password.length < 6)                               e.password = 'Password must be at least 6 characters';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -142,7 +142,7 @@ export default function LoginScreen() {
     setLoading(true);
     setErrors({});
     try {
-      const res = await authLogin(phone.trim(), password);
+      const res = await authLogin(email.trim(), password);
       await setAuth(res.user, res.access_token);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/');
@@ -190,16 +190,14 @@ export default function LoginScreen() {
             )}
 
             <FloatingLabelInput
-              label="Mobile number"
-              value={phone}
-              onChangeText={(t) => { setPhone(t.replace(/\D/g, '')); setErrors((e) => ({ ...e, phone: undefined })); }}
-              keyboardType="phone-pad"
-              autoComplete="tel"
+              label="Email address"
+              value={email}
+              onChangeText={(t) => { setEmail(t.trim()); setErrors((e) => ({ ...e, email: undefined })); }}
+              keyboardType="email-address"
+              autoComplete="email"
               returnKeyType="next"
               onSubmitEditing={() => passwordRef.current?.focus()}
-              maxLength={10}
-              prefix="+91"
-              error={errors.phone}
+              error={errors.email}
               autoFocus
             />
 
@@ -245,7 +243,7 @@ export default function LoginScreen() {
           {/* Demo hint */}
           <Animated.View entering={FadeInDown.duration(440).delay(260)} style={s.demoHint}>
             <View style={s.demoHintLine} />
-            <Text style={s.demoHintText}>No backend? Any phone + password works in demo mode</Text>
+            <Text style={s.demoHintText}>No backend? Any email + password works in demo mode</Text>
             <View style={s.demoHintLine} />
           </Animated.View>
 

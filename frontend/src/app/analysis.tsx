@@ -4,6 +4,7 @@
  */
 
 import { View, Text, StyleSheet } from 'react-native';
+import { scale, mScale } from '@/utils/responsive';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useMemo } from 'react';
 import { router } from 'expo-router';
@@ -11,7 +12,7 @@ import Animated, {
   FadeIn, FadeInDown,
   useSharedValue, useAnimatedStyle,
   withRepeat, withTiming, withSequence, withDelay,
-  interpolate, Easing,
+  interpolate, Easing, cancelAnimation,
 } from 'react-native-reanimated';
 
 import { useAppStore } from '@/store';
@@ -37,6 +38,7 @@ function PulsingRing({
       ),
       -1, false,
     ));
+    return () => { cancelAnimation(scale); cancelAnimation(opacity); };
   }, []);
 
   const style = useAnimatedStyle(() => ({
@@ -63,6 +65,7 @@ function OrbitalDot({ radius, startAngle, duration }: { radius: number; startAng
       withTiming(startAngle + 360, { duration, easing: Easing.linear }),
       -1, false,
     );
+    return () => cancelAnimation(angle);
   }, []);
 
   const style = useAnimatedStyle(() => {
@@ -96,6 +99,7 @@ function CentralOrb() {
       ),
       -1, false,
     );
+    return () => cancelAnimation(breathe);
   }, []);
 
   const orbStyle = useAnimatedStyle(() => ({
@@ -127,10 +131,10 @@ function CentralOrb() {
 }
 
 const co = StyleSheet.create({
-  container: { width: 180, height: 180, alignItems: 'center', justifyContent: 'center' },
-  orb:       { width: 86, height: 86, borderRadius: 43, backgroundColor: COLORS.ink, alignItems: 'center', justifyContent: 'center', shadowColor: COLORS.ink, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 20, elevation: 12 },
-  orbInner:  { width: 72, height: 72, borderRadius: 36, borderWidth: 1.5, borderColor: 'rgba(247,244,238,0.15)', alignItems: 'center', justifyContent: 'center' },
-  vMark:     { fontSize: 26, fontWeight: '800', color: COLORS.parchment, letterSpacing: 2 },
+  container: { width: scale(180), height: scale(180), alignItems: 'center', justifyContent: 'center' },
+  orb:       { width: scale(86), height: scale(86), borderRadius: scale(43), backgroundColor: COLORS.ink, alignItems: 'center', justifyContent: 'center', shadowColor: COLORS.ink, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.22, shadowRadius: 20, elevation: 12 },
+  orbInner:  { width: scale(72), height: scale(72), borderRadius: scale(36), borderWidth: 1.5, borderColor: 'rgba(247,244,238,0.15)', alignItems: 'center', justifyContent: 'center' },
+  vMark:     { fontSize: mScale(26), fontWeight: '800', color: COLORS.parchment, letterSpacing: 2 },
 });
 
 // ── StepRow ───────────────────────────────────────────────────────────────────
@@ -167,6 +171,7 @@ function StepRow({ step, active, done, index, isLast }: {
     } else {
       dotScale.value = withTiming(1);
     }
+    return () => cancelAnimation(dotScale);
   }, [active]);
   const dotStyle = useAnimatedStyle(() => ({ transform: [{ scale: dotScale.value }] }));
 
@@ -214,8 +219,8 @@ function StepRow({ step, active, done, index, isLast }: {
 
 const st = StyleSheet.create({
   row:     { flexDirection: 'row', gap: 14, minHeight: 52 },
-  timeline:{ alignItems: 'center', width: 22 },
-  mark:    { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.parchment, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  timeline:{ alignItems: 'center', width: scale(22) },
+  mark:    { width: scale(22), height: scale(22), borderRadius: scale(11), borderWidth: 1.5, borderColor: COLORS.border, backgroundColor: COLORS.parchment, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   markDone:       { backgroundColor: COLORS.ink, borderColor: COLORS.ink },
   markActive:     { borderColor: COLORS.sage, borderWidth: 2, backgroundColor: 'rgba(58,95,82,0.08)' },
   markCheck:      { width: 9, height: 9, borderRadius: 5, backgroundColor: '#fff' },
@@ -303,7 +308,7 @@ const styles = StyleSheet.create({
 
   header:   { gap: 6 },
   wordmark: { ...TYPE.micro, color: COLORS.textMuted, letterSpacing: 4, fontWeight: '700' },
-  subtitle: { fontSize: 28, fontWeight: '700', letterSpacing: -0.7, color: COLORS.ink, lineHeight: 34 },
+  subtitle: { fontSize: mScale(28), fontWeight: '700', letterSpacing: -0.7, color: COLORS.ink, lineHeight: mScale(34) },
 
   orbWrap: { alignItems: 'center', justifyContent: 'center' },
 

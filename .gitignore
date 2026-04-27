@@ -3,6 +3,10 @@
 .env.local
 .env.*.local
 backend/secrets/
+serviceAccount.json
+*serviceaccount*.json
+*service-account*.json
+*service_account*.json
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
@@ -21,9 +25,16 @@ env/
 # ── ML model artifacts (large binary files) ──────────────────────────────────
 *.pkl
 *.pth
-*.onnx
 *.h5
-*.tflite
+# Keep trained model files for mobile offline inference
+# (ONNX / TFLite are binary but must be in git for EAS Build to bundle them)
+!frontend/src/assets/models/*.onnx
+!frontend/src/assets/models/*.tflite
+# Exclude large training-side model checkpoints only
+backend/**/*.onnx
+backend/**/*.tflite
+models/**/*.onnx
+models/**/*.tflite
 
 # ── Node ──────────────────────────────────────────────────────────────────────
 node_modules/
