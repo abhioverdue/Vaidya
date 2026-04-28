@@ -6,6 +6,30 @@ import json, re, time
 from functools import lru_cache
 from typing import AsyncIterator, Optional
 
+
+def _strip_md(text: str) -> str:
+    """Remove markdown formatting so text renders cleanly in plain-text UI."""
+    if not text:
+        return text
+    # Headings: ## Heading → Heading
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # Bold/italic: **text** / *text* / ***text*** → text
+    text = re.sub(r'\*{1,3}([^*\n]+)\*{1,3}', r'\1', text)
+    # Inline code: `code` → code
+    text = re.sub(r'`([^`\n]*)`', r'\1', text)
+    # Horizontal rules
+    text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+    # Bullet/numbered list markers: "- item" / "* item" / "1. item" → leading space removed
+    text = re.sub(r'^\s*[-*]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+    # Collapse 3+ blank lines to 2
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def _strip_md_list(items: list[str]) -> list[str]:
+    return [_strip_md(s) for s in items if s]
+
 import httpx, structlog
 from pydantic import BaseModel, Field, field_validator
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
@@ -200,14 +224,14 @@ def _to_diagnosis_result(out: LLMDiagnosisOutput) -> DiagnosisResult:
             diff.append(entry)
 
     # Guarantee precautions are present
-    precautions = out.precautions or [
+    precautions = _strip_md_list(out.precautions) or [
         "Visit your nearest PHC or doctor for proper evaluation.",
         "Rest, stay well hydrated, and avoid strenuous activity.",
         "Monitor symptoms — seek emergency care if they worsen rapidly.",
     ]
 
     # Guarantee description is present
-    description = out.description or (
+    description = _strip_md(out.description) or (
         f"{out.primary_diagnosis} is a medical condition that requires professional evaluation. "
         "Please consult a qualified healthcare professional for a confirmed diagnosis and treatment plan."
     )
@@ -217,13 +241,13 @@ def _to_diagnosis_result(out: LLMDiagnosisOutput) -> DiagnosisResult:
         confidence=0.87,  # LLM results displayed at 87% — Gemini assessment is reliable
         icd_hint=out.icd_hint,
         differential=diff,
-        red_flags=out.red_flags,
+        red_flags=_strip_md_list(out.red_flags),
         description=description,
         precautions=precautions,
-        when_to_seek_emergency=out.when_to_seek_emergency,
+        when_to_seek_emergency=_strip_md(out.when_to_seek_emergency or ""),
         triage_level=out.triage_level,
-        triage_reasoning=out.triage_reasoning,
-        confidence_reason=out.confidence_reason,
+        triage_reasoning=_strip_md(out.triage_reasoning or ""),
+        confidence_reason=_strip_md(out.confidence_reason or ""),
         disclaimer=out.disclaimer,
         diagnosis_source="llm_gemini",
     )
@@ -482,7 +506,7 @@ async def enrich_vision_with_gemini(
 
     try:
         raw = await _call_gemini(messages)
-        result = raw.strip() if raw else None
+        result = _strip_md(raw.strip()) if raw else None
         if result:
             _vision_enrich_cache[vision_cache_key] = result
         return result
@@ -526,7 +550,7 @@ async def enrich_diagnosis_with_gemini(
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
     try:
         raw = await _call_gemini(messages)
-        result = raw.strip() if raw else None
+        result = _strip_md(raw.strip()) if raw else None
         if result:
             _enrich_cache[cache_key] = result
         return result

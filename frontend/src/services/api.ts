@@ -250,21 +250,19 @@ export async function fetchHospitals(params: {
   try {
     const { data } = await apiClient.get<HospitalListResponse>('/care/hospitals', {
       params,
-      timeout: 45_000,  // Overpass can take up to 28s; give it 45s before falling back
+      timeout: 12_000,  // Google Places (New) is ~200-500ms; 12s is generous
     });
     if (data?.results?.length) return data;
-    // Backend returned 0 results — static DB should have prevented this; show demo
+    // Backend returned 0 results — show demo
     console.warn('[Vaidya] fetchHospitals: backend returned 0 results', params);
     markDemoMode();
     return DEMO_HOSPITALS;
   } catch (err) {
-    console.warn('[Vaidya] fetchHospitals failed:', (err as any)?.message, (err as any)?.code, BASE_URL);
-    if (isNetworkUnreachable(err)) {
-      markDemoMode();
-      await _demoDelay(400);
-      return DEMO_HOSPITALS;
-    }
-    // Server reachable but returned an error — re-throw so care.tsx shows retry button
-    throw err;
+    // Any failure (network unreachable, server error, timeout, old IP baked in APK)
+    // falls back to demo hospitals so Find Care always shows something useful.
+    console.warn('[Vaidya] fetchHospitals failed — using demo:', (err as any)?.message, (err as any)?.code, BASE_URL);
+    markDemoMode();
+    await _demoDelay(400);
+    return DEMO_HOSPITALS;
   }
 }
