@@ -94,7 +94,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiBaseUrl": "http://18.61.225.167:8000",
+      "apiBaseUrl": "http://18.60.50.83:8000",
       "eas": {
         "projectId": "7f8e0df4-d70c-4ab4-b20e-995e148457b8"
       },
