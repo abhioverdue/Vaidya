@@ -20,27 +20,27 @@ Vaidya gives every patient, ASHA worker, and health officer a medical AI in thei
 │             (Expo / React Native · TypeScript)               │
 │                                                              │
 │   Voice Input     Text Input     Image Input    Find Care    │
-│   (Whisper STT)   (Gemini)      (Vision CNN)   (G-Maps)     │
+│   (Whisper STT)   (Gemini)      (Vision CNN)   (G-Maps)      │
 └───────┬───────────────┬──────────────┬──────────────┬────────┘
         │               │              │              │
         ▼               ▼              ▼              ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                  FASTAPI BACKEND  (AWS ECS)                   │
+│                  FASTAPI BACKEND  (AWS ECS)                  │
 │                                                              │
 │   ┌──────────────────────────────────────────────────────┐   │
-│   │             MULTIMODAL FUSION ENGINE                  │   │
+│   │             MULTIMODAL FUSION ENGINE                 │   │
 │   │                                                      │   │
 │   │   XGBoost Classifier   Audio CNN    Vision CNN       │   │
 │   │   (132 diseases)       (Cough)      (Chest/Skin)     │   │
 │   │          └──────────────┴────────────┘               │   │
-│   │                Adaptive Confidence Fusion             │   │
+│   │                Adaptive Confidence Fusion            │   │
 │   │                         │                            │   │
 │   │              Gemini 2.5 Flash  ← LLM fallback        │   │
 │   │              (structured JSON output)  conf < 0.6    │   │
 │   └─────────────────────────┬────────────────────────────┘   │
-│                             │                                 │
+│                             │                                │
 │   ┌─────────────────────────▼────────────────────────────┐   │
-│   │         TRIAGE ENGINE (Deterministic Rules)           │   │
+│   │         TRIAGE ENGINE (Deterministic Rules)           │  │
 │   │   Level 1 Self-care → Level 5 Emergency (108)        │   │
 │   └──────────────────────────────────────────────────────┘   │
 │                                                              │
@@ -171,15 +171,6 @@ npx expo start
 # Build APK:  eas build --profile preview --platform android
 ```
 
-### Required Environment Variables
-```
-GEMINI_API_KEY
-GOOGLE_MAPS_API_KEY
-FIREBASE_PROJECT_ID
-FIREBASE_SERVICE_ACCOUNT_KEY   # base64 encoded JSON
-REDIS_URL
-```
-
 ---
 
 ## API Reference
@@ -193,8 +184,6 @@ REDIS_URL
 | `GET` | `/api/v1/analytics/outbreaks/active` | Active outbreak alerts |
 | `GET` | `/api/v1/asha/nearby` | Nearby ASHA workers by GPS |
 | `GET` | `/health` | Health check |
-
-Interactive docs: [http://18.60.50.83:8000/docs](http://18.60.50.83:8000/docs)
 
 ---
 
