@@ -84,8 +84,8 @@ export async function authLogin(
       },
     };
   } catch (err: any) {
-    if (err?.code?.startsWith('auth/')) throw new Error(firebaseErrMsg(err.code));
-    if (isNetworkUnreachable(err)) {
+    // Firebase network error → demo fallback (APK may not reach Firebase on all networks)
+    if (err?.code === 'auth/network-request-failed' || isNetworkUnreachable(err)) {
       await demoDelay();
       return {
         access_token: `demo-token-${Date.now()}`,
@@ -93,6 +93,7 @@ export async function authLogin(
         user:         makeDemoUser(email, 'Demo User'),
       };
     }
+    if (err?.code?.startsWith('auth/')) throw new Error(firebaseErrMsg(err.code));
     throw err;
   }
 }
@@ -112,8 +113,7 @@ export async function authRegister(
       user: { id: cred.user.uid, name, email, age_group: 'adult' },
     };
   } catch (err: any) {
-    if (err?.code?.startsWith('auth/')) throw new Error(firebaseErrMsg(err.code));
-    if (isNetworkUnreachable(err)) {
+    if (err?.code === 'auth/network-request-failed' || isNetworkUnreachable(err)) {
       await demoDelay(1200);
       return {
         access_token: `demo-token-${Date.now()}`,
@@ -121,6 +121,7 @@ export async function authRegister(
         user:         makeDemoUser(email, name),
       };
     }
+    if (err?.code?.startsWith('auth/')) throw new Error(firebaseErrMsg(err.code));
     throw err;
   }
 }

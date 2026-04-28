@@ -11,7 +11,7 @@ CLUSTER="vaidya-cluster"
 SERVICE="vaidya-service"
 TASK_FAMILY="vaidya-task"
 CONTAINER_NAME="vaidya-backend"
-HEALTH_URL="http://40.192.2.179:8000/health"
+HEALTH_URL="http://18.61.225.167:8000/health"
 
 # Derive ECR repo from current task definition (no hardcoding needed)
 CURRENT_IMAGE=$(aws ecs describe-task-definition \

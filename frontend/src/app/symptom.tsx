@@ -852,7 +852,7 @@ const s = StyleSheet.create({
     borderRadius: RADIUS.xl,
   },
   submitBtn:         { backgroundColor: COLORS.ink, borderRadius: RADIUS.xl, paddingVertical: 20, alignItems: 'center' },
-  submitBtnDisabled: { backgroundColor: COLORS.borderMid },
+  submitBtnDisabled: { backgroundColor: COLORS.borderMid, opacity: 0.6 },
   submitText:        { ...TYPE.titleLarge, color: COLORS.textInverse, letterSpacing: 0.2, fontSize: 17 },
   submitHint:        { ...TYPE.micro, color: COLORS.textFaint, textAlign: 'center', marginTop: 8, letterSpacing: 0.2 },
 

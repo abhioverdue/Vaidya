@@ -465,15 +465,18 @@ export default function CareScreen() {
     centreQueued.current = true;
   }
 
+  const DEFAULT_LAT = 12.97;
+  const DEFAULT_LNG = 79.16;
+
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['hospitals', userLoc?.lat, userLoc?.lng, activeTab],
+    queryKey: ['hospitals', userLoc?.lat ?? DEFAULT_LAT, userLoc?.lng ?? DEFAULT_LNG, activeTab],
     queryFn:  () => fetchHospitals({
-      lat:       userLoc!.lat,
-      lng:       userLoc!.lng,
+      lat:       userLoc?.lat ?? DEFAULT_LAT,
+      lng:       userLoc?.lng ?? DEFAULT_LNG,
       type:      activeTab === 'all' ? undefined : activeTab,
       radius_km: 50,
     }),
-    enabled:  !!userLoc,
+    enabled:  true,
     staleTime: 2 * 60 * 1000,
     retry:    1,
   });
@@ -587,8 +590,8 @@ export default function CareScreen() {
         />
       ))}
     </MapView>
-  ) : (
-    /* react-native-maps failed to load — show OSM fallback */
+  ) : Platform.OS === 'web' ? (
+    /* Web: OSM iframe fallback */
     <WebMapView
       userLat={userLoc?.lat ?? 12.97}
       userLng={userLoc?.lng ?? 79.16}
@@ -596,6 +599,13 @@ export default function CareScreen() {
       selected={selected}
       onSelectHospital={setSelected}
     />
+  ) : (
+    /* Native: Map unavailable — show list only */
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+      <Text style={{ textAlign: 'center', color: COLORS.textMuted, fontSize: 16 }}>
+        Map view unavailable.{'\n'}Use the hospital list below.
+      </Text>
+    </View>
   );
 
   return (
@@ -690,7 +700,7 @@ export default function CareScreen() {
             </View>
           )}
 
-          {!isLoading && !error && userLoc && hospitals.length === 0 && (
+          {!isLoading && !error && hospitals.length === 0 && (
             <View style={styles.emptyRow}>
               <Text style={styles.emptyText}>{t('care.no_hospitals_nearby')}</Text>
               <TouchableOpacity

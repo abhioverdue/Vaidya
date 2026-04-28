@@ -1,5 +1,6 @@
 # ── Base image ────────────────────────────────────────────────────────────────
-FROM python:3.11-slim AS base
+# Using ECR Public Gallery mirror to avoid Docker Hub rate limits / TLS timeouts
+FROM public.ecr.aws/docker/library/python:3.11-slim AS base
 
 WORKDIR /app
 
