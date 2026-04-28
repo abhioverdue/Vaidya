@@ -31,7 +31,14 @@ DISEASE CONTEXT (common in rural India — prioritise these when plausible):
   Metabolic: Diabetes, Hypertension, Hypothyroidism, Anaemia
   Neurological: Migraine, Epilepsy, Stroke (Paralysis)
   Cardiac: Heart attack, Heart Failure, Arrhythmia
+  Musculoskeletal/Trauma: Ankle sprain, Fracture, Muscle strain, Contusion/bruise, Ligament injury, Back strain, Knee injury, Sports injury
   Other: Urinary Tract Infection, Kidney Stones, Arthritis, Anxiety, Depression
+
+IMPORTANT — INJURY vs CHRONIC DISEASE:
+  If the patient describes ACUTE trauma (fall, twist, impact, sudden onset swelling/bruising on a SPECIFIC limb or joint):
+    → diagnose the INJURY first (sprain, fracture, strain, contusion), NOT the chronic disease (Arthritis, Osteoarthritis, Varicose Veins).
+    Chronic joint diseases (Arthritis) require months of progressive symptoms — not an acute event.
+  If the patient mentions both recent trauma AND chronic symptoms, list both in differential.
 
 EMERGENCY RED FLAG PATTERNS — always set triage_level=5 if present:
   - Chest pain + breathlessness + sweating (cardiac)

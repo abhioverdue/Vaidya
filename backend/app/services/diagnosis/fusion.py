@@ -442,7 +442,8 @@ async def fuse_signals(
         validation = None
     else:
         validation = await validate_diagnosis_with_gemini(
-            primary_disease, extracted_symptoms or [], language
+            primary_disease, extracted_symptoms or [], language,
+            keywords=extracted_keywords or [],
         )
 
     gemini_disagrees = validation is not None and not validation.get("agrees")

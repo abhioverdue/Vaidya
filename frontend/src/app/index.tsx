@@ -359,7 +359,7 @@ export default function HomeScreen() {
         {/* ── Hero ────────────────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(460).delay(60)} style={styles.hero}>
           <Text style={styles.greeting}>{t(`home.${getGreetingKey()}`)}</Text>
-          <Text style={styles.heroTitle}>How are you{'\n'}feeling today?</Text>
+          <Text style={styles.heroTitle}>{t('home.hero_question')}</Text>
           <HeroWaveform />
           <Text style={styles.heroMeta}>
             {isOnline
@@ -381,8 +381,8 @@ export default function HomeScreen() {
         {/* ── Primary CTA ─────────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(400).delay(140)} style={{ marginBottom: 10 }}>
           <QuickActionCard
-            title="Check symptoms"
-            subtitle="Voice · Text · Image · AI Diagnosis"
+            title={t('home.nav_check_symptoms')}
+            subtitle={t('home.nav_check_subtitle')}
             tag={isOnline ? 'AI-powered' : 'Offline'}
             onPress={() => router.push('/symptom')}
             variant="primary"
@@ -393,10 +393,10 @@ export default function HomeScreen() {
         {/* ── Secondary grid ──────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(400).delay(190)} style={styles.secondaryRow}>
           <View style={styles.half}>
-            <QuickActionCard title="Find care" subtitle="PHC · CHC · Hospital" onPress={() => router.push('/care')} />
+            <QuickActionCard title={t('home.nav_find_care')} subtitle={t('home.nav_find_care_subtitle')} onPress={() => router.push('/care')} />
           </View>
           <View style={styles.half}>
-            <QuickActionCard title="Settings" subtitle="Language · Profile" onPress={() => router.push('/settings')} />
+            <QuickActionCard title={t('home.nav_settings')} subtitle={t('home.nav_settings_subtitle')} onPress={() => router.push('/settings')} />
           </View>
         </Animated.View>
 

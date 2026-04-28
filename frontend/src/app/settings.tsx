@@ -10,6 +10,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { useTranslation } from 'react-i18next';
 
 import { useAppStore } from '@/store';
 import { COLORS, LANGUAGES, TYPE, RADIUS } from '@/constants';
@@ -107,6 +108,7 @@ const pc = StyleSheet.create({
 // ── SettingsScreen ────────────────────────────────────────────────────────────
 
 export default function SettingsScreen() {
+  const { t }    = useTranslation();
   const store    = useAppStore();
   const language = store.language;
   const user     = store.user;
@@ -149,7 +151,7 @@ export default function SettingsScreen() {
             <Text style={styles.backText}>←</Text>
           </View>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={styles.headerTitle}>{t('settings.screen_title')}</Text>
         <View style={styles.headerRight} />
       </View>
 
@@ -163,7 +165,7 @@ export default function SettingsScreen() {
 
         {/* Language */}
         <Animated.View entering={FadeInDown.duration(400).delay(60)}>
-          <Section title="Language">
+          <Section title={t('settings.section_language')}>
             {LANGUAGES.map((lang, i) => (
               <Row
                 key={lang.code}
@@ -184,7 +186,7 @@ export default function SettingsScreen() {
 
         {/* AI Model status */}
         <Animated.View entering={FadeInDown.duration(400).delay(120)}>
-          <Section title="AI Model">
+          <Section title={t('settings.section_ai')}>
             <Row
               icon="✨"
               label="Gemini AI (Online)"
@@ -228,7 +230,7 @@ export default function SettingsScreen() {
 
         {/* Data & Privacy */}
         <Animated.View entering={FadeInDown.duration(400).delay(180)}>
-          <Section title="Data & Privacy">
+          <Section title={t('settings.section_privacy')}>
             <Row
               icon="🗑"
               label="Clear session history"
@@ -254,7 +256,7 @@ export default function SettingsScreen() {
 
         {/* Account */}
         <Animated.View entering={FadeInDown.duration(400).delay(240)}>
-          <Section title="Account">
+          <Section title={t('settings.section_account')}>
             <Row
               icon="🔑"
               label="Change password"
@@ -290,7 +292,7 @@ export default function SettingsScreen() {
 
         {/* About */}
         <Animated.View entering={FadeInDown.duration(400).delay(300)}>
-          <Section title="About">
+          <Section title={t('settings.section_about')}>
             <Row
               icon="ℹ️"
               label="Vaidya v1.0.0"

@@ -270,26 +270,35 @@ async def validate_diagnosis_with_gemini(
     diagnosis: str,
     symptoms: list[str],
     language: str = "en",
+    keywords: list[str] | None = None,
 ) -> dict | None:
     """
     Quick Gemini sanity check: does this XGBoost diagnosis match the symptoms?
+    keywords = raw patient words (e.g. ["ankle", "fell", "bruising"]) — critical for
+    distinguishing acute injury from chronic disease when the canonical features overlap.
     Returns {"agrees": bool, "alternative": str|None, "reasoning": str} or None on failure.
-    Results are cached in-process — identical (diagnosis, symptoms) never re-calls Gemini.
     """
     if not settings.GEMINI_API_KEY:
         return None
 
+    kw_sorted = ",".join(sorted((keywords or [])[:10]))
     fingerprint = ",".join(sorted(symptoms[:12]))
-    cache_key = f"{diagnosis}|{fingerprint}"
+    cache_key = f"{diagnosis}|{fingerprint}|{kw_sorted}"
     if cache_key in _validate_cache:
         logger.debug("vaidya.llm.validate_cache_hit", diagnosis=diagnosis)
         return _validate_cache[cache_key]
 
     symptoms_str = ', '.join(symptoms[:12]) or 'not specified'
+    kw_str = ', '.join((keywords or [])[:10])
+    kw_line = f"Patient's own words/context: {kw_str}.\n" if kw_str else ""
     prompt = (
-        f"Patient symptoms: {symptoms_str}.\n"
+        f"Patient symptoms (canonical features): {symptoms_str}.\n"
+        f"{kw_line}"
         f"ML model predicted: {diagnosis}.\n\n"
-        f"Is this diagnosis clinically consistent with these symptoms?\n"
+        f"Is this diagnosis clinically consistent? Consider especially:\n"
+        f"- If patient words suggest ACUTE trauma (ankle, fell, twist, bruise, swollen limb, injury) "
+        f"then chronic diseases (Arthritis, Osteoarthritis, Varicose Veins) are WRONG — prefer sprain/fracture/strain.\n"
+        f"- If patient words match the ML prediction, agree.\n"
         f"Reply ONLY with JSON (no other text):\n"
         f'If yes: {{"agrees": true, "alternative": null, "reasoning": "<1 sentence>"}}\n'
         f'If no:  {{"agrees": false, "alternative": "<correct diagnosis name>", "reasoning": "<1 sentence>"}}'

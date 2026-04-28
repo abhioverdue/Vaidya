@@ -446,6 +446,7 @@ export default function CareScreen() {
   }, [selected]);
 
   useEffect(() => {
+    startTracking();
     return () => { watchRef.current?.remove(); };
   }, []);
 
@@ -689,6 +690,18 @@ export default function CareScreen() {
             </View>
           )}
 
+          {!isLoading && !error && userLoc && hospitals.length === 0 && (
+            <View style={styles.emptyRow}>
+              <Text style={styles.emptyText}>{t('care.no_hospitals_nearby')}</Text>
+              <TouchableOpacity
+                style={styles.callBtn108}
+                onPress={() => Linking.openURL('tel:108')}
+              >
+                <Text style={styles.callBtn108Text}>{t('common.call_emergency')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <FlatList
             data={hospitals}
             keyExtractor={(h) => h.id}
@@ -826,6 +839,10 @@ const styles = StyleSheet.create({
   errorText:   { ...TYPE.bodySmall, color: COLORS.crimson },
   retryBtn:    { paddingHorizontal: 16, paddingVertical: 8, borderRadius: RADIUS.md, backgroundColor: COLORS.crimson },
   retryText:   { fontSize: 12, fontWeight: '700', color: '#fff' },
+  emptyRow:    { alignItems: 'center', padding: 28, gap: 14 },
+  emptyText:   { ...TYPE.bodySmall, color: COLORS.textMuted, textAlign: 'center' },
+  callBtn108:  { paddingHorizontal: 20, paddingVertical: 10, borderRadius: RADIUS.pill, backgroundColor: COLORS.crimson },
+  callBtn108Text: { fontSize: 13, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
 
   teleRow: {
     flexDirection: 'row', alignItems: 'center',

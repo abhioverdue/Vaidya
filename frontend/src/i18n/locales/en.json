@@ -38,7 +38,14 @@
     "no_sessions": "No checks yet — tap above to start",
     "emergency_banner": "Emergency? Call 108 now",
     "asha_contact": "My ASHA worker",
-    "find_hospital": "Find nearest hospital"
+    "find_hospital": "Find nearest hospital",
+    "hero_question": "How are you\nfeeling today?",
+    "nav_check_symptoms": "Check symptoms",
+    "nav_check_subtitle": "Voice · Text · Image · AI Diagnosis",
+    "nav_find_care": "Find care",
+    "nav_find_care_subtitle": "PHC · CHC · Hospital",
+    "nav_settings": "Settings",
+    "nav_settings_subtitle": "Language · Profile"
   },
 
   "symptom": {
@@ -129,6 +136,7 @@
     "teleconsult_tab": "Video consult",
     "loading_hospitals": "Finding nearby hospitals...",
     "no_hospitals": "No hospitals found nearby",
+    "no_hospitals_nearby": "No hospitals found near your location.\nTry moving to an open area or call 108 for emergency ambulance.",
     "km_away": "{{distance}} km away",
     "open_24h": "Open 24 hours",
     "ambulance": "108 ambulance available",
@@ -156,6 +164,11 @@
 
   "settings": {
     "screen_title": "Settings",
+    "section_language": "Language",
+    "section_ai": "AI Model",
+    "section_privacy": "Data & Privacy",
+    "section_account": "Account",
+    "section_about": "About",
     "language": "Language",
     "large_text": "Large text",
     "high_contrast": "High contrast",

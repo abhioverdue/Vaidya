@@ -38,7 +38,14 @@
     "no_sessions": "अभी तक कोई जाँच नहीं — ऊपर टैप करें",
     "emergency_banner": "आपातकाल? अभी 108 पर कॉल करें",
     "asha_contact": "मेरी ASHA कार्यकर्ता",
-    "find_hospital": "नजदीकी अस्पताल खोजें"
+    "find_hospital": "नजदीकी अस्पताल खोजें",
+    "hero_question": "आज आप कैसा\nमहसूस कर रहे हैं?",
+    "nav_check_symptoms": "लक्षण जाँचें",
+    "nav_check_subtitle": "आवाज़ · टेक्स्ट · छवि · AI निदान",
+    "nav_find_care": "देखभाल खोजें",
+    "nav_find_care_subtitle": "PHC · CHC · अस्पताल",
+    "nav_settings": "सेटिंग्स",
+    "nav_settings_subtitle": "भाषा · प्रोफ़ाइल"
   },
 
   "symptom": {
@@ -129,6 +136,7 @@
     "teleconsult_tab": "वीडियो परामर्श",
     "loading_hospitals": "नजदीकी अस्पताल ढूंढ रहे हैं...",
     "no_hospitals": "नजदीक कोई अस्पताल नहीं मिला",
+    "no_hospitals_nearby": "आपके स्थान के पास कोई अस्पताल नहीं मिला।\nकिसी खुली जगह पर जाएं या आपातकाल के लिए 108 पर कॉल करें।",
     "km_away": "{{distance}} किमी दूर",
     "open_24h": "24 घंटे खुला",
     "ambulance": "108 एम्बुलेंस उपलब्ध",
@@ -156,6 +164,11 @@
 
   "settings": {
     "screen_title": "सेटिंग्स",
+    "section_language": "भाषा",
+    "section_ai": "AI मॉडल",
+    "section_privacy": "डेटा और गोपनीयता",
+    "section_account": "खाता",
+    "section_about": "जानकारी",
     "language": "भाषा",
     "large_text": "बड़ा टेक्स्ट",
     "high_contrast": "उच्च कंट्रास्ट",

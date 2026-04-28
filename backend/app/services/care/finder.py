@@ -74,21 +74,8 @@ def _static_hospitals_near(lat: float, lng: float, radius_m: int, specialty: Opt
 
 
 def _fallback_hospitals(lat: float, lng: float) -> list[dict]:
-    return [
-        {
-            "osm_id":        "fallback_1",
-            "name":          "Nearest Primary Health Centre",
-            "hospital_type": "phc",
-            "address":       "Contact ASHA worker for directions",
-            "distance_km":   0.0,
-            "phone":         "108",
-            "ambulance_108": True,
-            "open_24h":      False,
-            "pmjay_empanelled": True,
-            "latitude":      lat,
-            "longitude":     lng,
-        }
-    ]
+    # Return empty — frontend shows "no hospitals found" instead of a fake pin in the sea.
+    return []
 
 
 async def find_nearby_hospitals(
