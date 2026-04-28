@@ -2,8 +2,6 @@
 
 > **Multimodal AI triage system that lets a rural patient describe symptoms by voice or text, get an instant diagnosis with triage urgency level, and find the nearest government hospital — in Tamil, Hindi, or English.**
 
-Live backend: `http://18.60.50.83:8000` &nbsp;·&nbsp; [API docs](http://18.60.50.83:8000/docs) &nbsp;·&nbsp; Built for **Google AI Solutions Challenge 2026**
-
 ---
 
 ## The Problem
