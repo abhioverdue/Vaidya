@@ -10,6 +10,7 @@ import { saveLanguage } from '@/i18n';
 import type { FullTriageResponse, Language, OfflinePrediction, TriageSession } from '@/types';
 import type { AuthUser } from '@/services/auth';
 import { authSignOut } from '@/services/auth';
+import { setAuthToken } from '@/services/api';
 
 // ── App slice ──────────────────────────────────────────────────────────────────
 interface AppState {
@@ -63,7 +64,7 @@ interface PatientState {
 // ── Auth slice ─────────────────────────────────────────────────────────────────
 export interface PendingRegistration {
   name:     string;
-  email:    string;
+  phone:    string;
   password: string;
   type:     'register' | 'reset';
   /** The OTP the user successfully verified — stored so reset-password can forward it to the backend */
@@ -201,6 +202,7 @@ export const useAppStore = create<AppState & SessionState & PatientState & AuthS
   pendingReg:      null,
 
   setAuth: async (user, token) => {
+    setAuthToken(token);
     set({ user, token, isAuthenticated: true });
     try {
       await AsyncStorage.multiSet([
@@ -214,6 +216,7 @@ export const useAppStore = create<AppState & SessionState & PatientState & AuthS
 
   logout: async () => {
     await authSignOut();
+    setAuthToken(null);
     set({
       user:            null,
       token:           null,
@@ -239,14 +242,18 @@ export const useAppStore = create<AppState & SessionState & PatientState & AuthS
       ]);
       const token   = results[0]?.[1] ?? null;
       const userRaw = results[1]?.[1] ?? null;
-      if (token && userRaw) {
+      if (token && token !== 'demo-token' && userRaw) {
         try {
           const user: AuthUser = JSON.parse(userRaw);
+          setAuthToken(token);
           set({ user, token, isAuthenticated: true });
         } catch {
           // Corrupt stored user — clear it so the app doesn't get stuck
           await AsyncStorage.multiRemove([STORAGE_KEYS.AUTH_TOKEN, STORAGE_KEYS.AUTH_USER]);
         }
+      } else if (token === 'demo-token') {
+        // Demo sessions must not auto-restore — force re-login on next app start
+        await AsyncStorage.multiRemove([STORAGE_KEYS.AUTH_TOKEN, STORAGE_KEYS.AUTH_USER]);
       }
     } catch {}
   },

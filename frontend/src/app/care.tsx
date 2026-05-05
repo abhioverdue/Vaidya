@@ -57,8 +57,8 @@ if (Platform.OS !== 'web') {
 const MAP_PROVIDER = Platform.OS === 'android' ? PROVIDER_GOOGLE : PROVIDER_DEFAULT;
 
 import { COLORS, TYPE, RADIUS } from '@/constants';
-import { fetchHospitals } from '@/services/api';
-import type { HospitalResult, HospitalType } from '@/types';
+import { fetchHospitals, getTeleconsultSlots } from '@/services/api';
+import type { HospitalResult, HospitalType, TeleconsultSlot } from '@/types';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -197,19 +197,26 @@ function HospitalPin({
 }: { hospital: HospitalResult; onPress: () => void; selected: boolean }) {
   if (Platform.OS === 'web' || !Marker) return null;
   const tc = TYPE_COLORS[hospital.hospital_type] ?? COLORS.textMuted;
+  const abbr = TYPE_LABELS[hospital.hospital_type] ?? '?';
   return (
     <Marker
       coordinate={{ latitude: hospital.latitude, longitude: hospital.longitude }}
       onPress={onPress}
       anchor={{ x: 0.5, y: 1 }}
-      tracksViewChanges={false}
+      tracksViewChanges={selected}
     >
-      <View style={[pin.wrap, selected && pin.wrapSelected]}>
-        <View style={[pin.dot, { backgroundColor: tc }, selected && pin.dotSelected]} />
+      <View style={pin.wrap}>
+        {/* Teardrop pin */}
+        <View style={[pin.head, { backgroundColor: tc, borderColor: selected ? '#fff' : tc }]}>
+          <Text style={pin.abbr}>{abbr}</Text>
+        </View>
+        <View style={[pin.tail, { borderTopColor: tc }]} />
         {selected && (
-          <Text style={[pin.label, { color: tc }]} numberOfLines={1}>
-            {TYPE_LABELS[hospital.hospital_type] ?? ''}
-          </Text>
+          <View style={[pin.callout, { borderColor: tc }]}>
+            <Text style={[pin.calloutText, { color: tc }]} numberOfLines={1}>
+              {hospital.name}
+            </Text>
+          </View>
         )}
       </View>
     </Marker>
@@ -217,15 +224,27 @@ function HospitalPin({
 }
 
 const pin = StyleSheet.create({
-  wrap:        { alignItems: 'center' },
-  wrapSelected:{ },
-  dot:         { width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#fff' },
-  dotSelected: { width: 18, height: 18, borderRadius: 9, borderWidth: 2.5 },
-  label:       {
-    fontSize: 9, fontWeight: '700', marginTop: 2, backgroundColor: '#fff',
-    paddingHorizontal: 4, paddingVertical: 1, borderRadius: 3,
-    overflow: 'hidden',
+  wrap:     { alignItems: 'center' },
+  head:     {
+    width: 30, height: 30, borderRadius: 15,
+    borderWidth: 2.5, alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 3, elevation: 4,
   },
+  abbr:     { fontSize: 8, fontWeight: '800', color: '#fff', letterSpacing: 0.3 },
+  tail:     {
+    width: 0, height: 0,
+    borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 8,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent',
+  },
+  callout:  {
+    marginTop: 4, backgroundColor: '#fff', borderRadius: 6,
+    paddingHorizontal: 7, paddingVertical: 3,
+    borderWidth: 1.5, maxWidth: 110,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15, shadowRadius: 2, elevation: 3,
+  },
+  calloutText: { fontSize: 9, fontWeight: '700' },
 });
 
 function HospitalSheet({
@@ -416,12 +435,20 @@ export default function CareScreen() {
     if (status !== 'granted') return;
     setPermGranted(true);
 
+    // Use last-known position immediately so the hospital query fires right away
+    const last = await Location.getLastKnownPositionAsync();
+    if (last) {
+      const { latitude: lat, longitude: lng, accuracy, heading } = last.coords;
+      setUserLoc({ lat, lng, accuracy: accuracy ?? 200, heading: heading ?? null });
+      centreOnUser(lat, lng);
+    }
+
     const initial = await Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     });
     const { latitude: lat, longitude: lng, accuracy, heading } = initial.coords;
     setUserLoc({ lat, lng, accuracy: accuracy ?? 50, heading: heading ?? null });
-    centreOnUser(lat, lng);
+    if (!last) centreOnUser(lat, lng);
 
     watchRef.current = await Location.watchPositionAsync(
       {
@@ -465,23 +492,35 @@ export default function CareScreen() {
     centreQueued.current = true;
   }
 
-  const DEFAULT_LAT = 12.97;
-  const DEFAULT_LNG = 79.16;
-
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ['hospitals', userLoc?.lat ?? DEFAULT_LAT, userLoc?.lng ?? DEFAULT_LNG, activeTab],
+    queryKey: ['hospitals', userLoc?.lat, userLoc?.lng],
     queryFn:  () => fetchHospitals({
-      lat:       userLoc?.lat ?? DEFAULT_LAT,
-      lng:       userLoc?.lng ?? DEFAULT_LNG,
-      type:      activeTab === 'all' ? undefined : activeTab,
-      radius_km: 50,
+      lat:       userLoc!.lat,
+      lng:       userLoc!.lng,
+      radius_km: 15,
     }),
-    enabled:  true,
+    enabled:  !!userLoc,
     staleTime: 2 * 60 * 1000,
     retry:    1,
   });
 
-  const hospitals: HospitalResult[] = data?.results ?? [];
+  const { data: slotsData } = useQuery({
+    queryKey: ['teleconsult-slots'],
+    queryFn:  () => getTeleconsultSlots(),
+    staleTime: 5 * 60 * 1000,
+    retry: 0,
+  });
+  const teleconsultSlots: TeleconsultSlot[] = slotsData ?? [];
+
+  const hospitals: HospitalResult[] = (data?.results ?? [])
+    .filter((h) => activeTab === 'all' || h.hospital_type === activeTab)
+    .map((h) => ({
+      ...h,
+      _distKm: userLoc
+        ? haversineKm(userLoc.lat, userLoc.lng, h.latitude, h.longitude)
+        : (h as any).distance_km ?? 999,
+    }))
+    .sort((a, b) => (a as any)._distKm - (b as any)._distKm);
 
   useEffect(() => {
     if (!hospitals.length || !userLoc || !mapRef.current || Platform.OS === 'web') return;
@@ -525,6 +564,12 @@ export default function CareScreen() {
       <TouchableOpacity style={styles.locBtn} onPress={startTracking}>
         <Text style={styles.locBtnText}>{t('care.allow_location')}</Text>
       </TouchableOpacity>
+    </Animated.View>
+  ) : permGranted && !userLoc ? (
+    <Animated.View entering={FadeInDown.duration(400)} style={styles.locPrompt}>
+      <ActivityIndicator size="large" color={COLORS.sage} />
+      <Text style={[styles.locTitle, { marginTop: 14 }]}>Getting your location…</Text>
+      <Text style={styles.locBody}>Finding hospitals near you</Text>
     </Animated.View>
   ) : Platform.OS === 'web' ? (
     /* Web — OSM iframe */
@@ -620,10 +665,12 @@ export default function CareScreen() {
           <Text style={styles.headerTitle}>{t('care.screen_title')}</Text>
           <Text style={styles.headerSub}>
             {!permGranted
-              ? t('care.loading_hospitals')
-              : isLoading
-                ? t('care.loading_hospitals')
-                : `${hospitals.length} ${t('care.hospitals_tab').toLowerCase()} · GPS`}
+              ? 'Allow location to find nearby hospitals'
+              : !userLoc
+                ? 'Getting your location…'
+                : isLoading
+                  ? t('care.loading_hospitals')
+                  : `${hospitals.length} within 15 km · GPS`}
           </Text>
         </View>
         <TouchableOpacity
@@ -727,16 +774,54 @@ export default function CareScreen() {
             )}
             ListFooterComponent={
               <View>
-                <TouchableOpacity
-                  style={styles.teleRow}
-                  onPress={() => Linking.openURL('https://esanjeevani.mohfw.gov.in/#/')}
-                >
-                  <View style={styles.teleLeft}>
-                    <Text style={styles.teleTitle}>{t('care.esanjeevani')}</Text>
-                    <Text style={styles.teleSub}>{t('care.teleconsult_free')}</Text>
-                  </View>
-                  <Text style={styles.teleArrow}>→</Text>
-                </TouchableOpacity>
+                {/* eSanjeevani teleconsult slots */}
+                <Text style={styles.slotsSectionTitle}>{t('care.esanjeevani')}</Text>
+                {teleconsultSlots.length > 0 ? (
+                  teleconsultSlots.map((slot, idx) => {
+                    const availTime = (() => {
+                      try {
+                        const d = new Date(slot.available_at);
+                        return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+                      } catch { return slot.available_at; }
+                    })();
+                    return (
+                      <View key={idx} style={styles.slotCard}>
+                        <View style={styles.slotLeft}>
+                          <Text style={styles.slotDoctor}>{slot.doctor_name}</Text>
+                          <Text style={styles.slotSpecialty}>{slot.specialty}</Text>
+                          <Text style={styles.slotTime}>Available {availTime} · {slot.platform}</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.slotBookBtn}
+                          onPress={() => router.push({
+                            pathname: '/teleconsult-book',
+                            params: {
+                              doctor_name:  slot.doctor_name,
+                              specialty:    slot.specialty,
+                              available_at: slot.available_at,
+                              platform:     slot.platform,
+                              booking_url:  slot.booking_url,
+                            },
+                          })}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.slotBookBtnText}>Book</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })
+                ) : (
+                  <TouchableOpacity
+                    style={styles.teleRow}
+                    onPress={() => Linking.openURL('https://esanjeevani.mohfw.gov.in/#/')}
+                  >
+                    <View style={styles.teleLeft}>
+                      <Text style={styles.teleTitle}>{t('care.esanjeevani')}</Text>
+                      <Text style={styles.teleSub}>{t('care.teleconsult_free')}</Text>
+                    </View>
+                    <Text style={styles.teleArrow}>→</Text>
+                  </TouchableOpacity>
+                )}
 
                 <TouchableOpacity
                   style={styles.emergencyBtn}
@@ -853,6 +938,26 @@ const styles = StyleSheet.create({
   emptyText:   { ...TYPE.bodySmall, color: COLORS.textMuted, textAlign: 'center' },
   callBtn108:  { paddingHorizontal: 20, paddingVertical: 10, borderRadius: RADIUS.pill, backgroundColor: COLORS.crimson },
   callBtn108Text: { fontSize: 13, fontWeight: '700', color: '#fff', letterSpacing: 0.3 },
+
+  slotsSectionTitle: {
+    ...TYPE.titleMed, color: COLORS.ink,
+    marginBottom: 8, marginTop: 4,
+  },
+  slotCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.surface, borderRadius: RADIUS.lg,
+    borderWidth: 1, borderColor: 'rgba(26,111,168,0.2)',
+    padding: 14, marginBottom: 8, gap: 12,
+  },
+  slotLeft:         { flex: 1, gap: 2 },
+  slotDoctor:       { ...TYPE.titleMed, color: COLORS.ink },
+  slotSpecialty:    { ...TYPE.bodyMed, color: COLORS.textMuted },
+  slotTime:         { ...TYPE.micro, color: '#1A6FA8', fontWeight: '600', marginTop: 2 },
+  slotBookBtn:      {
+    backgroundColor: '#1A6FA8', borderRadius: RADIUS.md,
+    paddingHorizontal: 16, paddingVertical: 10,
+  },
+  slotBookBtnText:  { fontSize: 13, fontWeight: '700', color: '#fff' },
 
   teleRow: {
     flexDirection: 'row', alignItems: 'center',
