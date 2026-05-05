@@ -26,6 +26,7 @@ import { TriageTag } from '@/components/ui/TriageTag';
 import { SectionHeader } from '@/components/ui/SectionHeader';
 import { GradientCard } from '@/components/ui/GradientCard';
 import { PillBadge } from '@/components/ui/PillBadge';
+import { MarkdownText } from '@/components/ui/MarkdownText';
 import type { DiagnosisResult, FullTriageResponse, OfflinePrediction, TriageLevel } from '@/types';
 
 // ── Type guards ───────────────────────────────────────────────────────────────
@@ -163,6 +164,33 @@ const SOURCE_LABELS: Record<string, string> = {
   tflite_offline: 'On-device AI · offline',
 };
 
+// ── Label formatters ──────────────────────────────────────────────────────────
+
+function formatAudioLabel(label: string): string {
+  const map: Record<string, string> = {
+    cough_severe:  'Severe cough pattern detected',
+    cough_healthy: 'Mild / normal respiratory sound',
+    wet_cough:     'Wet cough detected',
+    dry_cough:     'Dry cough detected',
+    wheeze:        'Wheezing detected',
+  };
+  return map[label] ?? label.replace(/_/g, ' ');
+}
+
+function formatVisionLabel(label: string): string {
+  const map: Record<string, string> = {
+    skin_disease:   'Skin condition detected',
+    wound:          'Wound / injury detected',
+    chest_opacity:  'Chest opacity — possible infection',
+    pneumonia:      'Pneumonia signs detected',
+    tuberculosis:   'TB signs detected',
+    pleural_effusion: 'Pleural effusion signs',
+    normal:         'No abnormality found',
+    no_finding:     'No finding',
+  };
+  return map[label] ?? label.replace(/_/g, ' ');
+}
+
 // ── ResultScreen ──────────────────────────────────────────────────────────────
 
 export default function ResultScreen() {
@@ -192,6 +220,27 @@ export default function ResultScreen() {
   const confLabel   = confidence >= 70 ? 'High' : confidence >= 45 ? 'Moderate' : 'Low';
   const diagSource: string = online ? (diagnosis.diagnosis_source ?? 'xgboost') : 'tflite_offline';
 
+  // ── Audio / vision derived state ──────────────────────────────────────────
+  const ar       = online ? (session as FullTriageResponse).audio_result : null;
+  const arLabel  = ar?.top_prediction?.label ?? '';
+  const arConf   = ar?.top_prediction?.confidence ?? 0;
+  // Only show audio card if a cough/wheeze was actually detected (not 'other' / background noise)
+  const showAudio = !!(ar && arLabel !== 'other' && arLabel !== '' && arConf >= 0.35);
+
+  const vr = online ? (session as FullTriageResponse).vision_result : null;
+  const vrTopPred = vr?.top_prediction;
+  const vrLabel   = typeof vrTopPred === 'string' ? vrTopPred : (vrTopPred?.label ?? '');
+  const vrConf    = typeof vrTopPred === 'object' && vrTopPred?.confidence != null
+    ? vrTopPred.confidence
+    : (vr?.all_predictions?.[0]?.confidence ?? 0);
+  // Inconclusive: model confidence too low, or Gemini flagged it as non-medical
+  const geminiDesc: string = vr?.gemini_description ?? '';
+  const nonMedicalKeywords = ['not a medical', 'not medical', 'food', 'fruit', 'vegetable', 'object', 'plant', 'animal'];
+  const isVisionInconclusive = !!(vr && (
+    vrConf < 0.40 ||
+    nonMedicalKeywords.some((kw) => geminiDesc.toLowerCase().includes(kw))
+  ));
+
   async function handleShare() {
     await Share.share({
       message: [
@@ -211,11 +260,6 @@ export default function ResultScreen() {
 
         {/* ── Header ───────────────────────────────────────────────── */}
         <View style={s.header}>
-          <TouchableOpacity onPress={() => router.back()} style={s.backBtn} accessibilityLabel="Go back">
-            <View style={s.backCircle}>
-              <Text style={s.backGlyph}>←</Text>
-            </View>
-          </TouchableOpacity>
           <Text style={s.headerTitle}>ASSESSMENT</Text>
           <TouchableOpacity onPress={handleShare} style={s.shareBtn}>
             <Text style={s.shareText}>Share</Text>
@@ -234,9 +278,9 @@ export default function ResultScreen() {
             <View style={s.triageBannerBody}>
               <TriageTag level={triageLevel} size="md" />
               {triage?.reasoning ? (
-                <Text style={[s.triageReasoning, { color: cfg.color }]} numberOfLines={3}>
+                <MarkdownText style={[s.triageReasoning, { color: cfg.color }]} numberOfLines={3}>
                   {triage.reasoning}
-                </Text>
+                </MarkdownText>
               ) : null}
             </View>
           </Animated.View>
@@ -351,42 +395,47 @@ export default function ResultScreen() {
           </GradientCard>
         </Animated.View>
 
-        {/* ── Audio result ────────────────────────────────────────── */}
-        {online && (session as FullTriageResponse).audio_result && (
+        {/* ── Audio result — only shown when cough/wheeze detected ── */}
+        {showAudio && (
           <Animated.View entering={FadeInDown.duration(350).delay(160)}>
             <GradientCard>
-              <Text style={s.cardLabel}>{t('audio_result.title').toUpperCase()}</Text>
-              <Text style={s.diagName}>{(session as FullTriageResponse).audio_result?.top_prediction?.label || 'Respiratory assessment'}</Text>
+              <Text style={s.cardLabel}>RESPIRATORY ANALYSIS</Text>
+              <Text style={s.diagName}>{formatAudioLabel(arLabel)}</Text>
               <View style={s.confRow}>
                 <Text style={s.confMetaLabel}>{t('result.confidence_label')}</Text>
-                <AnimatedConfidenceBar
-                  value={Math.round(((session as FullTriageResponse).audio_result?.top_prediction?.confidence || 0) * 100)}
-                  color={COLORS.sage}
-                  delay={400}
-                />
+                <AnimatedConfidenceBar value={Math.round(arConf * 100)} color={COLORS.sage} delay={400} />
               </View>
             </GradientCard>
           </Animated.View>
         )}
 
-        {/* ── Vision result ───────────────────────────────────────── */}
-        {online && (session as FullTriageResponse).vision_result && (() => {
-          const vr       = (session as FullTriageResponse).vision_result;
-          const topPred  = vr?.top_prediction;
-          const topLabel = typeof topPred === 'string' ? topPred : (topPred?.label ?? 'Pathology detected');
-          const topConf  = typeof topPred === 'object' && topPred?.confidence != null
-            ? Math.round(topPred.confidence * 100)
-            : Math.round((vr?.all_predictions?.[0]?.confidence ?? 0.85) * 100);
-          return (
-            <Animated.View entering={FadeInDown.duration(350).delay(180)}>
+        {/* ── Vision result — inconclusive if image is non-medical ── */}
+        {!!vr && (
+          <Animated.View entering={FadeInDown.duration(350).delay(180)}>
+            {isVisionInconclusive ? (
+              <GradientCard tint="rgba(120,120,120,0.04)">
+                <Text style={s.cardLabel}>IMAGE ANALYSIS</Text>
+                <View style={s.inconclusiveRow}>
+                  <Text style={s.inconclusiveIcon}>⚠</Text>
+                  <Text style={s.inconclusiveText}>
+                    Image inconclusive — could not identify a medical condition. Diagnosis is based on your described symptoms only.
+                  </Text>
+                </View>
+                {!!geminiDesc && (
+                  <View style={[s.visionGeminiWrap, { marginTop: 10 }]}>
+                    <Text style={[s.geminiText, { color: COLORS.textMuted }]}>{geminiDesc}</Text>
+                  </View>
+                )}
+              </GradientCard>
+            ) : (
               <GradientCard>
-                <Text style={s.cardLabel}>{t('image_result.title').toUpperCase()}</Text>
-                <Text style={s.diagName}>{topLabel}</Text>
+                <Text style={s.cardLabel}>IMAGE ANALYSIS</Text>
+                <Text style={s.diagName}>{formatVisionLabel(vrLabel)}</Text>
                 <View style={s.confRow}>
                   <Text style={s.confMetaLabel}>{t('result.confidence_label')}</Text>
-                  <AnimatedConfidenceBar value={topConf} color={COLORS.sage} delay={450} />
+                  <AnimatedConfidenceBar value={Math.round(vrConf * 100)} color={COLORS.sage} delay={450} />
                 </View>
-                {!!vr?.gemini_description && (
+                {!!geminiDesc && (
                   <View style={s.visionGeminiWrap}>
                     <View style={s.geminiHeader}>
                       <Text style={s.cardLabel}>GEMINI VISION ANALYSIS</Text>
@@ -394,16 +443,16 @@ export default function ResultScreen() {
                         <Text style={s.geminiBadgeText}>✦ Gemini</Text>
                       </View>
                     </View>
-                    <Text style={s.geminiText}>{vr.gemini_description}</Text>
+                    <Text style={s.geminiText}>{geminiDesc}</Text>
                   </View>
                 )}
               </GradientCard>
-            </Animated.View>
-          );
-        })()}
+            )}
+          </Animated.View>
+        )}
 
-        {/* ── Fusion detail button ─────────────────────────────────── */}
-        {online && ((session as FullTriageResponse).audio_result || (session as FullTriageResponse).vision_result) && (
+        {/* ── Fusion detail button — only when real media was analysed ── */}
+        {(showAudio || (!!vr && !isVisionInconclusive)) && (
           <Animated.View entering={FadeInDown.duration(350).delay(195)}>
             <TouchableOpacity style={s.fusionBtn} onPress={() => router.push('/fusion-detail')}>
               <Text style={s.fusionBtnText}>How was this diagnosed?  ›</Text>
@@ -525,10 +574,7 @@ const s = StyleSheet.create({
 
   // Header
   header:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, marginBottom: 12 },
-  backBtn:    { width: scale(40), height: scale(40), justifyContent: 'center' },
-  backCircle: { width: scale(34), height: scale(34), borderRadius: scale(17), backgroundColor: COLORS.parchmentWarm, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
-  backGlyph:  { fontSize: 17, color: COLORS.ink, marginTop: -1 },
-  headerTitle:{ ...TYPE.micro, color: COLORS.textMuted, letterSpacing: 2, fontWeight: '700' },
+  headerTitle:{ ...TYPE.micro, color: COLORS.textMuted, letterSpacing: 2, fontWeight: '700', flex: 1 },
   shareBtn:   { padding: 4 },
   shareText:  { ...TYPE.bodySmall, color: COLORS.textMuted, fontWeight: '600' },
 
@@ -626,4 +672,8 @@ const s = StyleSheet.create({
   lowConfText:        { ...TYPE.bodySmall, color: COLORS.gold, flex: 1, lineHeight: 20 },
   lowConfDismiss:     { paddingLeft: 10 },
   lowConfDismissText: { fontSize: 18, color: COLORS.gold, fontWeight: '400', lineHeight: 20 },
+
+  inconclusiveRow:  { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 8 },
+  inconclusiveIcon: { fontSize: 16, color: COLORS.textMuted, marginTop: 1 },
+  inconclusiveText: { ...TYPE.bodySmall, color: COLORS.textMuted, flex: 1, lineHeight: 20 },
 });

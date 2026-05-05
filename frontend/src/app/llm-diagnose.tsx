@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 
 import { COLORS, TYPE, RADIUS } from '@/constants';
 import { apiClient } from '@/services/api';
+import { MarkdownText } from '@/components/ui/MarkdownText';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -302,7 +303,7 @@ export default function LlmDiagnoseScreen() {
             {/* Reasoning */}
             <View style={[s.card, { marginTop: 12 }]}>
               <Text style={s.sectionTitle}>Clinical reasoning</Text>
-              <Text style={s.reasoning}>{result.reasoning}</Text>
+              <MarkdownText style={s.reasoning}>{result.reasoning}</MarkdownText>
             </View>
 
             {/* Precautions */}
@@ -343,7 +344,7 @@ export default function LlmDiagnoseScreen() {
 
             {/* Disclaimer */}
             <View style={[s.card, s.disclaimerCard, { marginTop: 12 }]}>
-              <Text style={s.disclaimerText}>{result.disclaimer}</Text>
+              <MarkdownText style={s.disclaimerText}>{result.disclaimer}</MarkdownText>
             </View>
 
           </Animated.View>
