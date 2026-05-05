@@ -174,8 +174,11 @@ export default function NlpSymptomsScreen() {
     queryKey: ['nlp-symptoms-all'],
     queryFn: async () => {
       try {
-        const { data } = await apiClient.get<{ symptoms: SymptomItem[] }>('/nlp/symptoms');
-        return data.symptoms;
+        const { data } = await apiClient.get<{ symptoms: string[] }>('/nlp/symptoms');
+        return (data.symptoms ?? []).map((s: string) => ({
+          id: s,
+          name: s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        }));
       } catch {
         return DEMO_ALL_SYMPTOMS;
       }
@@ -190,11 +193,17 @@ export default function NlpSymptomsScreen() {
     queryFn: async () => {
       if (!debouncedQ) return [];
       try {
-        const { data } = await apiClient.get<{ results: SearchResult[] }>(
+        const { data } = await apiClient.get<{ results: Array<{ symptom: string; score: number }> }>(
           '/nlp/symptoms/search',
           { params: { q: debouncedQ } },
         );
-        return data.results;
+        return (data.results ?? []).map((r) => ({
+          symptom: {
+            id: r.symptom,
+            name: r.symptom.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+          },
+          score: r.score,
+        }));
       } catch {
         return demoSearch(debouncedQ);
       }
@@ -207,8 +216,18 @@ export default function NlpSymptomsScreen() {
   const extractMutation = useMutation({
     mutationFn: async (text: string) => {
       try {
-        const { data } = await apiClient.post<ExtractResult>('/nlp/extract', { text });
-        return data;
+        const { data } = await apiClient.post('/nlp/extract', { text });
+        const ex = data.extracted ?? data;
+        const symptoms: SymptomItem[] = (ex.symptoms ?? []).map((s: string) => ({
+          id: s,
+          name: s.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+        }));
+        return {
+          symptoms,
+          duration: ex.duration ?? undefined,
+          severity_estimate: ex.severity_estimate ?? 5,
+          body_parts: ex.body_parts ?? [],
+        } as ExtractResult;
       } catch {
         await new Promise((r) => setTimeout(r, 900));
         return DEMO_EXTRACT;

@@ -149,8 +149,19 @@ export default function LlmDiagnoseScreen() {
   const diagnoseMutation = useMutation({
     mutationFn: async (payload: LlmDiagnoseRequest) => {
       try {
-        const { data } = await apiClient.post<LlmDiagnoseResponse>('/llm/diagnose', payload);
-        return data;
+        const { data } = await apiClient.post('/llm/diagnose', {
+          symptoms: [payload.text],
+          language: payload.language,
+        });
+        return {
+          session_id: `llm-${Date.now()}`,
+          primary_diagnosis: data.primary_diagnosis,
+          confidence: data.confidence ?? 0,
+          reasoning: data.triage_reasoning ?? data.confidence_reason ?? data.reasoning ?? '',
+          precautions: data.precautions ?? [],
+          red_flags: data.red_flags ?? [],
+          disclaimer: data.disclaimer ?? '',
+        } as LlmDiagnoseResponse;
       } catch {
         await new Promise((r) => setTimeout(r, 2200));
         return { ...DEMO_RESPONSE, session_id: `llm-demo-${Date.now()}` };

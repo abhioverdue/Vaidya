@@ -87,10 +87,20 @@ export default function ConsentManageScreen() {
     queryKey: ['consent-descriptions'],
     queryFn: async () => {
       try {
-        const { data } = await apiClient.get<{ purposes: ConsentPurpose[] }>(
+        const { data } = await apiClient.get<{ purposes: Array<{ type: string; required: boolean; description: string }> }>(
           '/consent/descriptions',
         );
-        return data.purposes;
+        const NAME_MAP: Record<string, string> = {
+          data_processing:      'Core Data Processing',
+          anonymised_analytics: 'Anonymised Health Analytics',
+          asha_contact:         'ASHA Worker Follow-up Contact',
+        };
+        return data.purposes.map((p) => ({
+          key:         p.type as PurposeKey,
+          name:        NAME_MAP[p.type] ?? p.type,
+          required:    p.required,
+          description: p.description,
+        }));
       } catch {
         return DEMO_PURPOSES;
       }
