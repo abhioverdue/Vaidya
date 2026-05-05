@@ -144,6 +144,21 @@ export default function RootLayout() {
                 <Stack.Screen name="audio-result" />
                 <Stack.Screen name="image-result" />
                 <Stack.Screen name="fusion-detail"/>
+                <Stack.Screen name="teleconsult-book"  options={{ animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="asha-register"     options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="asha-performance"  options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="asha-queue"        options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="asha-nearby"       options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="asha-stats"        options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="patients-profile"  options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="consent-manage"    options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="nlp-symptoms"      options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="llm-diagnose"      options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="hotspots"          options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="trends"            options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="outbreaks"         options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="outbreak-detail"   options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="dashboard-district" options={{ animation: 'slide_from_right' }} />
               </Stack>
             </AppInit>
           </QueryClientProvider>

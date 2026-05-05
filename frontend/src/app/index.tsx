@@ -400,6 +400,40 @@ export default function HomeScreen() {
           </View>
         </Animated.View>
 
+        {/* ── Tools grid ──────────────────────────────────────────────── */}
+        <Animated.View entering={FadeInDown.duration(400).delay(210)}>
+          <Text style={styles.toolsLabel}>TOOLS & ANALYTICS</Text>
+          <View style={styles.toolsGrid}>
+            {[
+              { icon: '👥', label: 'ASHA Queue',      route: '/asha-queue'         },
+              { icon: '📊', label: 'Dashboard',       route: '/dashboard-district' },
+              { icon: '⚠️', label: 'Outbreaks',       route: '/outbreaks'          },
+              { icon: '🗺',  label: 'Hotspots',        route: '/hotspots'           },
+              { icon: '📈', label: 'Disease Trends',  route: '/trends'             },
+              { icon: '🔬', label: 'NLP Symptoms',    route: '/nlp-symptoms'       },
+              { icon: '👤', label: 'My Profile',      route: '/patients-profile'   },
+              { icon: '🔒', label: 'Consent',         route: '/consent-manage'     },
+              { icon: '🏥', label: 'ASHA Nearby',     route: '/asha-nearby'        },
+              { icon: '📋', label: 'ASHA Register',   route: '/asha-register'      },
+              { icon: '📉', label: 'Performance',     route: '/asha-performance'   },
+              { icon: '🤖', label: 'AI Diagnose',     route: '/llm-diagnose'       },
+            ].map(({ icon, label, route }) => (
+              <TouchableOpacity
+                key={route}
+                style={styles.toolCard}
+                onPress={async () => {
+                  await Haptics.selectionAsync();
+                  router.push(route as any);
+                }}
+                activeOpacity={0.75}
+              >
+                <Text style={styles.toolIcon}>{icon}</Text>
+                <Text style={styles.toolLabel}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </Animated.View>
+
         {/* ── Outbreak alert (community crisis signal) ────────────────── */}
         {outbreakSignal && (
           <Animated.View entering={FadeInDown.duration(360).delay(220)}>
@@ -545,6 +579,23 @@ const styles = StyleSheet.create({
 
   secondaryRow: { flexDirection: 'row', gap: 10, marginBottom: 10 },
   half:         { flex: 1 },
+
+  toolsLabel: { ...TYPE.micro, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 10, paddingHorizontal: 2, fontWeight: '700' },
+  toolsGrid:  { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  toolCard:   {
+    width: '22.5%',
+    aspectRatio: 1,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    padding: 4,
+  },
+  toolIcon:  { fontSize: 22 },
+  toolLabel: { fontSize: 9, fontWeight: '600', color: COLORS.textSub, textAlign: 'center', lineHeight: 12 },
 
   // Outbreak alert
   outbreakBanner: {

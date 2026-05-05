@@ -160,7 +160,7 @@ export default function SettingsScreen() {
         {/* Profile card */}
         <Animated.View entering={FadeInDown.duration(400)}>
           <Text style={styles.sectionLabel}>PROFILE</Text>
-          <ProfileCard name={user?.name ?? ''} email={user?.email ?? ''} />
+          <ProfileCard name={user?.name ?? ''} email={user?.phone ?? ''} />
         </Animated.View>
 
         {/* Language */}
@@ -232,24 +232,25 @@ export default function SettingsScreen() {
         <Animated.View entering={FadeInDown.duration(400).delay(180)}>
           <Section title={t('settings.section_privacy')}>
             <Row
-              icon="🗑"
-              label="Clear session history"
-              sub={`${store.sessionHistory.length} session${store.sessionHistory.length !== 1 ? 's' : ''} stored locally`}
-              onPress={confirmClear}
+              icon="👤"
+              label="Patient Profile"
+              sub="ABDM Health ID, language, session history"
+              onPress={() => { Haptics.selectionAsync(); router.push('/patients-profile'); }}
               isLast={false}
             />
             <Row
               icon="🔒"
-              label="All data stays on device"
-              sub="No user data is uploaded to any server"
+              label="Privacy & Consent"
+              sub="DPDP Act 2023 — manage your data preferences"
+              onPress={() => { Haptics.selectionAsync(); router.push('/consent-manage'); }}
+              isLast={false}
+            />
+            <Row
+              icon="🗑"
+              label="Clear session history"
+              sub={`${store.sessionHistory.length} session${store.sessionHistory.length !== 1 ? 's' : ''} stored locally`}
+              onPress={confirmClear}
               isLast
-              onPress={() => {
-                Haptics.selectionAsync();
-                Alert.alert(
-                  'Privacy Policy',
-                  'Vaidya stores all session data locally on your device only.\n\n• No symptoms, photos, or audio are uploaded\n• No account data is sold or shared\n• Anonymised, aggregated patterns may be used for public health research with your consent\n• You can clear all data at any time',
-                );
-              }}
             />
           </Section>
         </Animated.View>
@@ -272,7 +273,7 @@ export default function SettingsScreen() {
             <Row
               icon="✉️"
               label="Account email"
-              sub={user?.email ?? 'Not set'}
+              sub={user?.phone ?? 'Not set'}
               onPress={() => {
                 Haptics.selectionAsync();
                 Alert.alert('Account email', 'Contact support to update your registered email address.');
