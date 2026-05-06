@@ -435,10 +435,12 @@ export default function CareScreen() {
     if (status !== 'granted') return;
     setPermGranted(true);
 
-    // Use last-known position immediately so the hospital query fires right away
+    // Only use last-known position if it's fresh (< 5 min) — stale positions
+    // from a different location would fire the hospital query with wrong coords
     const last = await Location.getLastKnownPositionAsync();
-    if (last) {
-      const { latitude: lat, longitude: lng, accuracy, heading } = last.coords;
+    const lastIsFresh = !!last && (Date.now() - last.timestamp) < 5 * 60 * 1000;
+    if (lastIsFresh) {
+      const { latitude: lat, longitude: lng, accuracy, heading } = last!.coords;
       setUserLoc({ lat, lng, accuracy: accuracy ?? 200, heading: heading ?? null });
       centreOnUser(lat, lng);
     }
@@ -448,7 +450,7 @@ export default function CareScreen() {
     });
     const { latitude: lat, longitude: lng, accuracy, heading } = initial.coords;
     setUserLoc({ lat, lng, accuracy: accuracy ?? 50, heading: heading ?? null });
-    if (!last) centreOnUser(lat, lng);
+    if (!lastIsFresh) centreOnUser(lat, lng);
 
     watchRef.current = await Location.watchPositionAsync(
       {
