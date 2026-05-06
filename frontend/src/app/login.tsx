@@ -1,301 +1,280 @@
-/**
- * Vaidya — Login screen
- * Mobile number (+91) + password. Spring animations, haptics, demo fallback.
- */
-
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  KeyboardAvoidingView, Platform, ScrollView,
+  View, Text, TextInput, TouchableOpacity,
+  StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, {
-  FadeInDown, FadeInUp,
-  useSharedValue, useAnimatedStyle, withSpring, withTiming,
-  interpolate, Easing,
-} from 'react-native-reanimated';
-import { useState, useRef, useCallback } from 'react';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import { useState } from 'react';
 import * as Haptics from 'expo-haptics';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
+} from 'firebase/auth';
 
-import { useAppStore } from '@/store';
-import { authLogin } from '@/services/auth';
+import { useTranslation } from 'react-i18next';
+import { getFirebaseAuth, isFirebaseConfigured } from '@/services/firebase';
+import { useAppStore }     from '@/store';
 import { COLORS, TYPE, RADIUS } from '@/constants';
 
-// ── FloatingLabelInput ────────────────────────────────────────────────────────
-
-interface FLInputProps {
-  label:           string;
-  value:           string;
-  onChangeText:    (t: string) => void;
-  keyboardType?:   any;
-  secureTextEntry?: boolean;
-  autoComplete?:   any;
-  returnKeyType?:  any;
-  onSubmitEditing?: () => void;
-  maxLength?:      number;
-  prefix?:         string;
-  rightEl?:        React.ReactNode;
-  error?:          string;
-  autoFocus?:      boolean;
-  inputRef?:       React.RefObject<TextInput>;
-}
-
-function FloatingLabelInput({
-  label, value, onChangeText, keyboardType, secureTextEntry, autoComplete,
-  returnKeyType, onSubmitEditing, maxLength, prefix, rightEl, error, autoFocus, inputRef,
-}: FLInputProps) {
-  const [focused, setFocused] = useState(false);
-  const labelAnim = useSharedValue(value ? 1 : 0);
-
-  const onFocus = useCallback(() => {
-    setFocused(true);
-    labelAnim.value = withTiming(1, { duration: 180, easing: Easing.out(Easing.quad) });
-  }, []);
-
-  const onBlur = useCallback(() => {
-    setFocused(false);
-    if (!value) labelAnim.value = withTiming(0, { duration: 160 });
-  }, [value]);
-
-  const labelStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(labelAnim.value, [0, 1], [0, -22]) },
-      { scale:      interpolate(labelAnim.value, [0, 1], [1, 0.82]) },
-    ],
-    color: interpolate(labelAnim.value, [0, 1], [0, 1]) > 0.5
-      ? (focused ? COLORS.sage : COLORS.textMuted)
-      : COLORS.textFaint,
-  }));
-
-  const borderColor = error ? COLORS.crimson : focused ? COLORS.sage : COLORS.border;
-
-  return (
-    <View style={fi.wrap}>
-      <View style={[fi.field, { borderColor }]}>
-        {prefix && <Text style={fi.prefix}>{prefix}</Text>}
-        <View style={fi.inputWrap}>
-          <Animated.Text style={[fi.label, labelStyle]}>{label}</Animated.Text>
-          <TextInput
-            ref={inputRef}
-            style={fi.input}
-            value={value}
-            onChangeText={onChangeText}
-            onFocus={onFocus}
-            onBlur={onBlur}
-            keyboardType={keyboardType}
-            secureTextEntry={secureTextEntry}
-            autoComplete={autoComplete}
-            returnKeyType={returnKeyType}
-            onSubmitEditing={onSubmitEditing}
-            maxLength={maxLength}
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoFocus={autoFocus}
-          />
-        </View>
-        {rightEl && <View style={fi.rightEl}>{rightEl}</View>}
-      </View>
-      {error ? <Text style={fi.error}>{error}</Text> : null}
-    </View>
-  );
-}
-
-const fi = StyleSheet.create({
-  wrap:     { marginBottom: 16 },
-  field:    { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderRadius: RADIUS.lg, backgroundColor: COLORS.surface, paddingHorizontal: 16, minHeight: 58 },
-  prefix:   { ...TYPE.bodyMed, color: COLORS.textSub, marginRight: 6, fontWeight: '600', paddingTop: 14 },
-  inputWrap:{ flex: 1, position: 'relative', justifyContent: 'center', paddingTop: 14 },
-  label:    { position: 'absolute', ...TYPE.bodyMed, color: COLORS.textFaint, transformOrigin: 'left center' as any, top: 18 },
-  input:    { ...TYPE.bodyMed, color: COLORS.ink, paddingVertical: 4, paddingBottom: 8 },
-  rightEl:  { marginLeft: 8 },
-  error:    { ...TYPE.micro, color: COLORS.crimson, marginTop: 4, marginLeft: 4 },
-});
-
-// ── LoginScreen ───────────────────────────────────────────────────────────────
-
 export default function LoginScreen() {
-  const setAuth = useAppStore((s) => s.setAuth);
+  const { t } = useTranslation();
+  const { setAuth } = useAppStore();
 
+  const [mode,     setMode]     = useState<'signin' | 'signup'>('signin');
+  const [name,     setName]     = useState('');
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
-  const [showPass, setShowPass] = useState(false);
   const [loading,  setLoading]  = useState(false);
-  const [errors,   setErrors]   = useState<{ email?: string; password?: string; general?: string }>({});
+  const [error,    setError]    = useState('');
 
-  const passwordRef = useRef<TextInput>(null);
+  const canSubmit = email.trim().length > 0 && password.length >= 6
+    && (mode === 'signin' || name.trim().length >= 2);
 
-  const btnScale = useSharedValue(1);
-  const btnStyle = useAnimatedStyle(() => ({ transform: [{ scale: btnScale.value }] }));
-
-  function validate(): boolean {
-    const e: typeof errors = {};
-    if (!email.trim())                                          e.email    = 'Enter your email address';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) e.email   = 'Enter a valid email address';
-    if (!password)                                              e.password = 'Enter your password';
-    else if (password.length < 6)                               e.password = 'Password must be at least 6 characters';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  }
-
-  async function handleLogin() {
-    if (!validate()) { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); return; }
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setError('');
     setLoading(true);
-    setErrors({});
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
     try {
-      const res = await authLogin(email.trim(), password);
-      await setAuth(res.user, res.access_token);
+      if (!isFirebaseConfigured()) {
+        // Firebase keys missing — fall through to demo login below
+        throw Object.assign(new Error('not configured'), { code: 'auth/network-request-failed' });
+      }
+      const auth = getFirebaseAuth();
+      let userCred;
+
+      if (mode === 'signup') {
+        userCred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        try { await updateProfile(userCred.user, { displayName: name.trim() }); } catch {}
+      } else {
+        userCred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      }
+
+      const token = await userCred.user.getIdToken();
+      await setAuth(
+        {
+          id:    userCred.user.uid,
+          name:  userCred.user.displayName ?? name.trim() ?? email.trim(),
+          phone: '',
+        },
+        token,
+      );
+
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/');
-    } catch (err: any) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = err?.response?.data?.detail ?? err?.message ?? 'Login failed. Please try again.';
-      setErrors({ general: String(msg) });
-    } finally {
+    } catch (e: any) {
+      const code: string = e?.code ?? '';
+
+      // Network unreachable → show error, do not silently bypass login
+      if (code === 'auth/network-request-failed') {
+        setError(t('auth.err_network'));
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+
+      const friendly: Record<string, string> = {
+        'auth/invalid-credential':       t('auth.err_invalid_credential'),
+        'auth/wrong-password':           t('auth.err_wrong_password'),
+        'auth/user-not-found':           t('auth.err_user_not_found'),
+        'auth/email-already-in-use':     t('auth.err_email_in_use'),
+        'auth/weak-password':            t('auth.err_weak_password'),
+        'auth/invalid-email':            t('auth.err_invalid_email'),
+        'auth/too-many-requests':        t('auth.err_too_many_requests'),
+        'auth/user-disabled':            t('auth.err_user_disabled'),
+        'auth/operation-not-allowed':    t('auth.err_op_not_allowed'),
+      };
+      setError(friendly[code] ?? t('common.error'));
       setLoading(false);
     }
+  }
+
+  function switchMode() {
+    setError('');
+    setMode(m => m === 'signin' ? 'signup' : 'signin');
   }
 
   return (
     <SafeAreaView style={s.safe}>
       <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={s.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <ScrollView
-          contentContainerStyle={s.scroll}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Logo */}
-          <Animated.View entering={FadeInUp.duration(600)} style={s.logoWrap}>
-            <View style={s.logoMark}>
-              <Text style={s.logoMarkText}>V</Text>
+        <View style={s.root}>
+
+          {/* ── Brand ── */}
+          <Animated.View entering={FadeInDown.duration(460)} style={s.brand}>
+            <View style={s.logoRow}>
+              <View style={s.dot1} />
+              <View style={s.dot2} />
             </View>
-            <Text style={s.wordmark}>VAIDYA</Text>
-            <Text style={s.tagline}>AI Health Triage for India</Text>
+            <Text style={s.wordmark}>{t('common.app_name').toUpperCase()}</Text>
+            <Text style={s.tagline}>{t('auth.tagline')}</Text>
           </Animated.View>
 
-          {/* Heading */}
-          <Animated.View entering={FadeInDown.duration(440).delay(100)} style={s.headingWrap}>
-            <Text style={s.heading}>Welcome back</Text>
-            <Text style={s.subheading}>Sign in to continue your health journey</Text>
+          {/* ── Feature chips ── */}
+          <Animated.View entering={FadeInDown.duration(420).delay(80)} style={s.chips}>
+            {[t('auth.conditions_count'), t('auth.gemini_ai'), t('auth.offline_ready'), t('auth.three_languages')].map((c) => (
+              <View key={c} style={s.chip}>
+                <View style={s.chipDot} />
+                <Text style={s.chipText}>{c}</Text>
+              </View>
+            ))}
           </Animated.View>
 
-          {/* Form */}
-          <Animated.View entering={FadeInDown.duration(440).delay(180)} style={s.form}>
-            {errors.general && (
-              <View style={s.errorBanner}>
-                <Text style={s.errorBannerText}>{errors.general}</Text>
+          {/* ── Card ── */}
+          <Animated.View entering={FadeInDown.duration(420).delay(160)} style={s.card}>
+
+            {/* Mode toggle */}
+            <View style={s.modeRow}>
+              <TouchableOpacity
+                style={[s.modeTab, mode === 'signin' && s.modeTabActive]}
+                onPress={() => mode !== 'signin' && switchMode()}
+              >
+                <Text style={[s.modeTabText, mode === 'signin' && s.modeTabTextActive]}>{t('auth.sign_in')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.modeTab, mode === 'signup' && s.modeTabActive]}
+                onPress={() => mode !== 'signup' && switchMode()}
+              >
+                <Text style={[s.modeTabText, mode === 'signup' && s.modeTabTextActive]}>{t('auth.create_account')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={s.cardSub}>{t('auth.data_on_device')}</Text>
+
+            {error ? (
+              <View style={s.errorBox}>
+                <Text style={s.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            {mode === 'signup' && (
+              <View style={s.field}>
+                <Text style={s.label}>{t('auth.full_name')}</Text>
+                <TextInput
+                  style={s.input}
+                  placeholder={t('auth.name_placeholder')}
+                  placeholderTextColor={COLORS.textFaint}
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                  returnKeyType="next"
+                />
               </View>
             )}
 
-            <FloatingLabelInput
-              label="Email address"
-              value={email}
-              onChangeText={(t) => { setEmail(t.trim()); setErrors((e) => ({ ...e, email: undefined })); }}
-              keyboardType="email-address"
-              autoComplete="email"
-              returnKeyType="next"
-              onSubmitEditing={() => passwordRef.current?.focus()}
-              error={errors.email}
-              autoFocus
-            />
+            <View style={s.field}>
+              <Text style={s.label}>{t('auth.email')}</Text>
+              <TextInput
+                style={s.input}
+                placeholder={t('auth.email_placeholder')}
+                placeholderTextColor={COLORS.textFaint}
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+            </View>
 
-            <FloatingLabelInput
-              label="Password"
-              value={password}
-              onChangeText={(t) => { setPassword(t); setErrors((e) => ({ ...e, password: undefined })); }}
-              secureTextEntry={!showPass}
-              autoComplete="password"
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-              inputRef={passwordRef}
-              error={errors.password}
-              rightEl={
-                <TouchableOpacity onPress={() => setShowPass((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={s.showHide}>{showPass ? 'Hide' : 'Show'}</Text>
-                </TouchableOpacity>
-              }
-            />
+            <View style={s.field}>
+              <Text style={s.label}>{t('auth.password')}</Text>
+              <TextInput
+                style={s.input}
+                placeholder={t('auth.password_placeholder')}
+                placeholderTextColor={COLORS.textFaint}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                returnKeyType="done"
+                onSubmitEditing={handleSubmit}
+              />
+            </View>
 
             <TouchableOpacity
-              style={s.forgotWrap}
-              onPress={() => router.push('/reset-password')}
+              style={[s.btn, (!canSubmit || loading) && s.btnDisabled]}
+              onPress={handleSubmit}
+              disabled={!canSubmit || loading}
+              activeOpacity={0.88}
             >
-              <Text style={s.forgotText}>Forgot password?</Text>
+              {loading
+                ? <ActivityIndicator size="small" color={COLORS.parchment} />
+                : <Text style={s.btnText}>
+                    {mode === 'signin' ? t('auth.sign_in_btn') : t('auth.create_account_btn')}
+                  </Text>}
             </TouchableOpacity>
 
-            {/* Sign in button */}
-            <Animated.View style={btnStyle}>
-              <TouchableOpacity
-                style={[s.btn, loading && s.btnLoading]}
-                onPress={handleLogin}
-                onPressIn={() => { btnScale.value = withSpring(0.97, { damping: 20, stiffness: 300 }); }}
-                onPressOut={() => { btnScale.value = withSpring(1,    { damping: 20, stiffness: 300 }); }}
-                disabled={loading}
-                activeOpacity={0.9}
-              >
-                <Text style={s.btnText}>{loading ? 'Signing in…' : 'Sign in  →'}</Text>
-              </TouchableOpacity>
-            </Animated.View>
-          </Animated.View>
+            <Text style={s.hint}>{t('auth.no_data_shared')}</Text>
 
-          {/* Demo hint */}
-          <Animated.View entering={FadeInDown.duration(440).delay(260)} style={s.demoHint}>
-            <View style={s.demoHintLine} />
-            <Text style={s.demoHintText}>No backend? Any email + password works in demo mode</Text>
-            <View style={s.demoHintLine} />
-          </Animated.View>
-
-          {/* Register link */}
-          <Animated.View entering={FadeInDown.duration(440).delay(300)} style={s.registerWrap}>
-            <Text style={s.registerText}>Don't have an account?</Text>
-            <TouchableOpacity onPress={() => router.push('/register')}>
-              <Text style={s.registerLink}>  Create account</Text>
+            <TouchableOpacity
+              style={s.guestBtn}
+              onPress={async () => {
+                await setAuth({ id: 'demo-' + Date.now(), name: 'Guest', phone: '' }, 'demo-token');
+                router.replace('/');
+              }}
+            >
+              <Text style={s.guestText}>{t('auth.continue_guest')}</Text>
             </TouchableOpacity>
           </Animated.View>
 
-        </ScrollView>
+          {/* ── Footer ── */}
+          <Animated.View entering={FadeInUp.duration(380).delay(240)} style={s.footer}>
+            <Text style={s.footerText}>{t('auth.footer')}</Text>
+            <Text style={s.sos}>{t('auth.sos')}</Text>
+          </Animated.View>
+
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
-
 const s = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: COLORS.parchment },
-  scroll: { flexGrow: 1, paddingHorizontal: 28, paddingBottom: 48, paddingTop: 24 },
+  safe: { flex: 1, backgroundColor: COLORS.parchment },
+  flex: { flex: 1 },
+  root: { flex: 1, paddingHorizontal: 28, justifyContent: 'center', gap: 24 },
 
-  logoWrap:     { alignItems: 'center', marginBottom: 36, gap: 8 },
-  logoMark:     { width: 60, height: 60, borderRadius: 18, backgroundColor: COLORS.ink, alignItems: 'center', justifyContent: 'center', shadowColor: COLORS.ink, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 8, marginBottom: 4 },
-  logoMarkText: { fontSize: 28, fontWeight: '800', color: COLORS.parchment, letterSpacing: 1 },
-  wordmark:     { fontSize: 16, fontWeight: '800', letterSpacing: 5, color: COLORS.ink },
-  tagline:      { ...TYPE.micro, color: COLORS.textMuted, letterSpacing: 0.5 },
+  brand:    { alignItems: 'center', gap: 10 },
+  logoRow:  { flexDirection: 'row', gap: 6, marginBottom: 4 },
+  dot1:     { width: 12, height: 12, borderRadius: 6, backgroundColor: COLORS.sage },
+  dot2:     { width: 8,  height: 8,  borderRadius: 4, backgroundColor: COLORS.sage, marginTop: 4, opacity: 0.45 },
+  wordmark: { fontSize: 36, fontWeight: '800', letterSpacing: 6, color: COLORS.ink },
+  tagline:  { ...TYPE.bodySmall, color: COLORS.textMuted, letterSpacing: 0.4 },
 
-  headingWrap:  { marginBottom: 28, gap: 6 },
-  heading:      { fontSize: 30, fontWeight: '700', letterSpacing: -0.8, color: COLORS.ink, lineHeight: 36 },
-  subheading:   { ...TYPE.bodyMed, color: COLORS.textMuted },
+  chips:    { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  chip:     { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.surface, borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border },
+  chipDot:  { width: 5, height: 5, borderRadius: 3, backgroundColor: COLORS.sage },
+  chipText: { ...TYPE.micro, color: COLORS.textSub, fontWeight: '600' },
 
-  form:         { gap: 0, marginBottom: 8 },
+  card:      { backgroundColor: COLORS.surface, borderRadius: RADIUS.xl, padding: 24, borderWidth: 1, borderColor: COLORS.border, gap: 14, shadowColor: COLORS.ink, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.07, shadowRadius: 12, elevation: 4 },
+  cardSub:   { ...TYPE.bodySmall, color: COLORS.textMuted },
 
-  errorBanner:  { backgroundColor: 'rgba(194,59,34,0.08)', borderRadius: RADIUS.md, borderWidth: 1, borderColor: 'rgba(194,59,34,0.2)', padding: 14, marginBottom: 16 },
-  errorBannerText: { ...TYPE.bodySmall, color: COLORS.crimson, lineHeight: 20 },
+  modeRow:         { flexDirection: 'row', backgroundColor: COLORS.parchment, borderRadius: RADIUS.lg, padding: 3, gap: 2 },
+  modeTab:         { flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: RADIUS.md },
+  modeTabActive:   { backgroundColor: COLORS.surface, shadowColor: COLORS.ink, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4, elevation: 2 },
+  modeTabText:     { fontSize: 13, fontWeight: '600', color: COLORS.textMuted },
+  modeTabTextActive:{ color: COLORS.ink, fontWeight: '700' },
 
-  showHide:     { ...TYPE.bodySmall, color: COLORS.sage, fontWeight: '700' },
+  errorBox:  { backgroundColor: 'rgba(194,59,34,0.08)', borderRadius: RADIUS.md, borderWidth: 1, borderColor: 'rgba(194,59,34,0.22)', padding: 12 },
+  errorText: { ...TYPE.bodySmall, color: COLORS.crimson, lineHeight: 20 },
 
-  forgotWrap: { alignSelf: 'flex-end', marginTop: -4, marginBottom: 20 },
-  forgotText: { ...TYPE.bodySmall, color: COLORS.sage, fontWeight: '600' },
+  field:    { gap: 6 },
+  label:    { ...TYPE.micro, color: COLORS.textSub, fontWeight: '700', letterSpacing: 0.5, textTransform: 'uppercase' },
+  input:    { backgroundColor: COLORS.parchment, borderRadius: RADIUS.md, borderWidth: 1.5, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16, color: COLORS.ink },
 
-  btn:        { backgroundColor: COLORS.ink, borderRadius: RADIUS.xl, paddingVertical: 20, alignItems: 'center', shadowColor: COLORS.ink, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 14, elevation: 8 },
-  btnLoading: { backgroundColor: COLORS.inkSoft },
-  btnText:    { ...TYPE.titleLarge, color: COLORS.textInverse, letterSpacing: 0.2, fontSize: 17 },
+  btn:         { backgroundColor: COLORS.ink, borderRadius: RADIUS.xl, paddingVertical: 17, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  btnDisabled: { opacity: 0.4 },
+  btnText:     { fontSize: 16, fontWeight: '700', color: COLORS.parchment, letterSpacing: 0.2 },
 
-  demoHint:      { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 24 },
-  demoHintLine:  { flex: 1, height: 1, backgroundColor: COLORS.border },
-  demoHintText:  { ...TYPE.micro, color: COLORS.textFaint, textAlign: 'center', flexShrink: 1 },
+  hint:      { ...TYPE.micro, color: COLORS.textFaint, textAlign: 'center', lineHeight: 18 },
+  guestBtn:  { marginTop: 14, paddingVertical: 12, alignItems: 'center' },
+  guestText: { ...TYPE.micro, color: COLORS.textSub, fontWeight: '600', letterSpacing: 0.3, textDecorationLine: 'underline' },
 
-  registerWrap: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  registerText: { ...TYPE.bodyMed, color: COLORS.textMuted },
-  registerLink: { ...TYPE.bodyMed, color: COLORS.sage, fontWeight: '700' },
+  footer:     { alignItems: 'center', gap: 8, paddingBottom: 8 },
+  footerText: { ...TYPE.micro, color: COLORS.textFaint, textAlign: 'center', lineHeight: 17, paddingHorizontal: 8 },
+  sos:        { ...TYPE.micro, color: COLORS.crimson, fontWeight: '700', letterSpacing: 0.3 },
 });

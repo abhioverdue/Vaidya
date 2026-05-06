@@ -23,6 +23,7 @@ import * as Haptics from 'expo-haptics';
 
 import { useAppStore } from '@/store';
 import { useTriage } from '@/hooks/useTriage';
+import type { TriageOpts } from '@/hooks/useTriage';
 import { submitVoice, analyzeCoughAudio, type CoughResult } from '@/services/api';
 import { COLORS, QUICK_SYMPTOMS, TYPE, RADIUS } from '@/constants';
 import { scale, vScale } from '@/utils/responsive';
@@ -135,11 +136,14 @@ export default function SymptomScreen() {
   const store         = useAppStore();
   const { runTriage } = useTriage();
 
+  const [isInjury, setIsInjury]               = useState(false);
   const [isRecording, setIsRecording]         = useState(false);
   const [isTranscribing, setIsTranscribing]   = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [selectedChips, setSelectedChips]     = useState<string[]>([]);
-  const [showAdvanced, setShowAdvanced]       = useState(false);
+
+  // Clear leftover symptoms from previous session on mount
+  useEffect(() => { store.resetInput(); }, []);
   const [showImageTaskModal, setShowImageTaskModal] = useState(false);
   const [coughResult, setCoughResult]         = useState<CoughResult | null>(null);
   const [showCoughPopup, setShowCoughPopup]   = useState(false);
@@ -151,7 +155,12 @@ export default function SymptomScreen() {
   }, []);
 
   const lang  = store.language as Language;
-  const chips = QUICK_SYMPTOMS[lang];
+  const INJURY_CHIPS = [
+    'Swelling', 'Bruising', 'Pain on movement', 'Cannot bear weight',
+    'Deformity', 'Numbness / tingling', 'Wound / cut', 'Bleeding',
+    'Head injury', 'Back pain after fall', 'Burns', 'Dislocation',
+  ];
+  const chips = isInjury ? INJURY_CHIPS : QUICK_SYMPTOMS[lang];
   const canSubmit = !!(store.symptomText.trim() || selectedChips.length > 0);
 
   // Estimate how many distinct symptoms have been described
@@ -230,36 +239,34 @@ export default function SymptomScreen() {
     await recordingRef.current.stopAndUnloadAsync();
     const uri = recordingRef.current.getURI();
     recordingRef.current = null;
+    // Reset audio session so a second recording can acquire the mic
+    await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
     if (!uri) return;
     store.setAudioUri(uri);
 
-    if (store.isOnline) {
-      // Transcription and cough detection run concurrently
-      setIsTranscribing(true);
-      const [transcriptResult] = await Promise.allSettled([
-        submitVoice(uri, lang),
-        analyzeCoughAudio(uri).then((res) => {
-          if (res.detected) {
-            setCoughResult(res);
-            setShowCoughPopup(true);
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            if (coughDismissTimer.current) clearTimeout(coughDismissTimer.current);
-            coughDismissTimer.current = setTimeout(() => setShowCoughPopup(false), 4500);
-          }
-        }).catch(() => {}),
-      ]);
-      if (transcriptResult.status === 'fulfilled') {
-        const r = transcriptResult.value;
-        setVoiceTranscript(r.transcript);
-        store.setSymptomText(
-          store.symptomText ? `${store.symptomText}. ${r.transcript}` : r.transcript,
-        );
-      }
-      setIsTranscribing(false);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    // Always run transcription + cough detection — both have demo fallbacks
+    setIsTranscribing(true);
+    const [transcriptResult] = await Promise.allSettled([
+      submitVoice(uri, lang),
+      analyzeCoughAudio(uri).then((res) => {
+        if (res.detected) {
+          setCoughResult(res);
+          setShowCoughPopup(true);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          if (coughDismissTimer.current) clearTimeout(coughDismissTimer.current);
+          coughDismissTimer.current = setTimeout(() => setShowCoughPopup(false), 4500);
+        }
+      }).catch(() => {}),
+    ]);
+    if (transcriptResult.status === 'fulfilled') {
+      const r = transcriptResult.value;
+      setVoiceTranscript(r.transcript);
+      store.setSymptomText(
+        store.symptomText ? `${store.symptomText}. ${r.transcript}` : r.transcript,
+      );
     }
+    setIsTranscribing(false);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   }
 
   function pickImage() {
@@ -299,7 +306,7 @@ export default function SymptomScreen() {
   function handleSubmit() {
     const text = store.symptomText.trim() || selectedChips.join(', ');
     if (!text) return;
-    runTriage(text);
+    runTriage(text, { isInjury });
   }
 
   const severityColor = (n: number) => {
@@ -315,16 +322,8 @@ export default function SymptomScreen() {
 
       {/* ── Header ────────────────────────────────────────────────────── */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => router.back()} style={s.backBtn} accessibilityLabel="Go back">
-          <View style={s.backCircle}>
-            <Text style={s.backGlyph}>←</Text>
-          </View>
-        </TouchableOpacity>
-        <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>{t('symptom.screen_title')}</Text>
-          <StatusIndicator online={store.isOnline} />
-        </View>
-        <View style={{ width: 40 }} />
+        <Text style={s.headerTitle}>{t('symptom.screen_title')}</Text>
+        <StatusIndicator online={store.isOnline} />
       </View>
 
       <ScrollView
@@ -334,6 +333,31 @@ export default function SymptomScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {!store.isOnline && <OfflineBanner />}
+
+        {/* ── Mode toggle: Disease / Injury ──────────────────────────── */}
+        <Animated.View entering={FadeInDown.duration(340)} style={s.modeToggle}>
+          <TouchableOpacity
+            style={[s.modeBtn, !isInjury && s.modeBtnActive]}
+            onPress={() => { setIsInjury(false); setSelectedChips([]); store.setSymptomText(''); Haptics.selectionAsync(); }}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.modeBtnText, !isInjury && s.modeBtnTextActive]}>Disease / Illness</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.modeBtn, isInjury && s.modeBtnInjury]}
+            onPress={() => { setIsInjury(true); setSelectedChips([]); store.setSymptomText(''); Haptics.selectionAsync(); }}
+            activeOpacity={0.8}
+          >
+            <Text style={[s.modeBtnText, isInjury && s.modeBtnTextActive]}>Injury / Trauma</Text>
+          </TouchableOpacity>
+        </Animated.View>
+        {isInjury && (
+          <Animated.View entering={FadeIn.duration(220)} style={s.injuryNote}>
+            <Text style={s.injuryNoteText}>
+              Injury mode routes directly to Gemini AI — XGBoost disease classifier is bypassed. Requires internet.
+            </Text>
+          </Animated.View>
+        )}
 
         {/* ── Voice section ──────────────────────────────────────────── */}
         <Animated.View entering={FadeInDown.duration(380)} style={s.voiceCard}>
@@ -407,7 +431,9 @@ export default function SymptomScreen() {
 
           <TextInput
             style={s.textInput}
-            placeholder="e.g. Fever and headache for two days, feeling weak..."
+            placeholder={isInjury
+              ? 'e.g. Swollen ankle, bruising, pain when walking, possible broken bone...'
+              : 'e.g. Fever and headache for two days, feeling weak...'}
             placeholderTextColor={COLORS.textFaint}
             value={store.symptomText}
             onChangeText={store.setSymptomText}
@@ -493,65 +519,58 @@ export default function SymptomScreen() {
           </Animated.View>
         )}
 
-        {/* ── Advanced: duration + severity ─────────────────────────── */}
-        <Animated.View entering={FadeInDown.duration(380).delay(165)}>
-          <TouchableOpacity
-            style={s.advancedToggle}
-            onPress={() => { setShowAdvanced((v) => !v); Haptics.selectionAsync(); }}
-          >
-            <Text style={s.advancedToggleText}>
-              {showAdvanced ? 'Hide' : 'Add'} duration & severity
-            </Text>
-            <View style={[s.chevronWrap, showAdvanced && s.chevronWrapOpen]}>
-              <Text style={s.advancedChevron}>›</Text>
+        {/* ── Severity (always visible) ──────────────────────────────── */}
+        <Animated.View entering={FadeInDown.duration(380).delay(165)} style={s.severityCard}>
+          <View style={s.severityHeader}>
+            <View>
+              <Text style={s.sectionLabel}>SEVERITY</Text>
+              <Text style={s.severitySubLabel}>
+                {isInjury ? 'How bad is the pain / injury?' : 'How severe are your symptoms?'}
+              </Text>
             </View>
-          </TouchableOpacity>
+            <PillBadge
+              label={store.severity > 0 ? `${store.severity} / 10` : 'Not set'}
+              color={store.severity > 0 ? severityColor(store.severity) : COLORS.textFaint}
+              bg="transparent"
+              size="sm"
+            />
+          </View>
+          <View style={s.severityRow}>
+            {([1,2,3,4,5,6,7,8,9,10] as const).map((n) => {
+              const active = store.severity === n;
+              return (
+                <TouchableOpacity
+                  key={n}
+                  style={[s.sevBtn, active && { backgroundColor: severityColor(n), borderColor: severityColor(n) }]}
+                  onPress={() => { store.setSeverity(n); Haptics.selectionAsync(); }}
+                >
+                  <Text style={[s.sevText, active && s.sevTextActive]}>{n}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View style={s.severityScale}>
+            <Text style={s.severityScaleText}>Mild</Text>
+            <Text style={s.severityScaleText}>Moderate</Text>
+            <Text style={s.severityScaleText}>Severe</Text>
+          </View>
 
-          {showAdvanced && (
-            <Animated.View entering={FadeInDown.duration(240)} style={s.advancedCard}>
-              {/* Duration */}
-              <Text style={s.subLabel}>Duration</Text>
-              <View style={s.durationRow}>
-                {DURATIONS.map((d) => {
-                  const active = store.duration === d;
-                  return (
-                    <TouchableOpacity
-                      key={d}
-                      style={[s.durationBtn, active && s.durationBtnActive]}
-                      onPress={() => { store.setDuration(d); Haptics.selectionAsync(); }}
-                    >
-                      <Text style={[s.durationText, active && s.durationTextActive]}>{d}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Severity */}
-              <View style={s.severityHeader}>
-                <Text style={s.subLabel}>Severity</Text>
-                <PillBadge
-                  label={`${store.severity} / 10`}
-                  color={severityColor(store.severity)}
-                  bg="transparent"
-                  size="sm"
-                />
-              </View>
-              <View style={s.severityRow}>
-                {([1,2,3,4,5,6,7,8,9,10] as const).map((n) => {
-                  const active = store.severity === n;
-                  return (
-                    <TouchableOpacity
-                      key={n}
-                      style={[s.sevBtn, active && { backgroundColor: severityColor(n), borderColor: severityColor(n) }]}
-                      onPress={() => { store.setSeverity(n); Haptics.selectionAsync(); }}
-                    >
-                      <Text style={[s.sevText, active && s.sevTextActive]}>{n}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </Animated.View>
-          )}
+          {/* Duration */}
+          <Text style={[s.sectionLabel, { marginTop: 14 }]}>DURATION</Text>
+          <View style={s.durationRow}>
+            {DURATIONS.map((d) => {
+              const active = store.duration === d;
+              return (
+                <TouchableOpacity
+                  key={d}
+                  style={[s.durationBtn, active && s.durationBtnActive]}
+                  onPress={() => { store.setDuration(d); Haptics.selectionAsync(); }}
+                >
+                  <Text style={[s.durationText, active && s.durationTextActive]}>{d}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </Animated.View>
 
         <View style={{ height: vScale(130) }} />
@@ -577,12 +596,16 @@ export default function SymptomScreen() {
             <Pressable
               style={[s.submitBtn, (!canSubmit || store.isAnalysing) && s.submitBtnDisabled]}
               onPress={handleSubmit}
-              onPressIn={() => { submitScale.value = withSpring(0.97, { damping: 20, stiffness: 300 }); }}
-              onPressOut={() => { submitScale.value = withSpring(1,    { damping: 20, stiffness: 300 }); }}
+              onPressIn={() => { if (canSubmit) submitScale.value = withSpring(0.97, { damping: 20, stiffness: 300 }); }}
+              onPressOut={() => { submitScale.value = withSpring(1, { damping: 20, stiffness: 300 }); }}
               disabled={!canSubmit || store.isAnalysing}
             >
-              <Text style={s.submitText}>
-                {store.isAnalysing ? t('analysis.screen_title') : `${t('symptom.analyze_btn')} →`}
+              <Text style={[s.submitText, !canSubmit && s.submitTextInactive]}>
+                {store.isAnalysing
+                  ? t('analysis.screen_title')
+                  : canSubmit
+                    ? `${t('symptom.analyze_btn')} →`
+                    : isInjury ? 'Describe your injury above' : 'Describe your symptoms above'}
               </Text>
             </Pressable>
           </Animated.View>
@@ -683,11 +706,7 @@ const s = StyleSheet.create({
   safe:        { flex: 1, backgroundColor: COLORS.parchment },
 
   // Header
-  header:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  backBtn:      { width: 40, height: 40, justifyContent: 'center' },
-  backCircle:   { width: 34, height: 34, borderRadius: 17, backgroundColor: COLORS.parchmentWarm, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
-  backGlyph:    { fontSize: 17, color: COLORS.ink, marginTop: -1 },
-  headerCenter: { alignItems: 'center', gap: 5 },
+  header:       { alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 4 },
   headerTitle:  { ...TYPE.titleLarge, color: COLORS.ink },
 
   scroll:        { flex: 1 },
@@ -809,33 +828,34 @@ const s = StyleSheet.create({
   selectedPill:    { backgroundColor: COLORS.ink, borderRadius: RADIUS.pill, paddingHorizontal: 10, paddingVertical: 5 },
   selectedPillText:{ ...TYPE.micro, color: '#fff', fontWeight: '600' },
 
-  // Advanced section
-  advancedToggle:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
-  advancedToggleText: { ...TYPE.bodySmall, color: COLORS.textMuted, fontWeight: '600' },
-  chevronWrap:        { width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.parchmentWarm, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
-  chevronWrapOpen:    { backgroundColor: COLORS.ink, borderColor: COLORS.ink },
-  advancedChevron:    { fontSize: 16, color: COLORS.textFaint, fontWeight: '400', marginTop: -1 },
-
-  advancedCard: {
+  // Severity card (always visible)
+  severityCard: {
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.xl,
     padding: 18,
     borderWidth: 1,
     borderColor: COLORS.border,
-    gap: 8,
+    gap: 10,
+    shadowColor: COLORS.ink,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 1,
   },
+  severitySubLabel:   { ...TYPE.bodySmall, color: COLORS.textMuted, marginTop: 2 },
+  severityHeader:     { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  severityRow:        { flexDirection: 'row', gap: 4 },
+  sevBtn:             { flex: 1, paddingVertical: 11, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', backgroundColor: COLORS.parchment },
+  sevText:            { fontSize: 12, fontWeight: '600', color: COLORS.textMuted },
+  sevTextActive:      { color: '#fff' },
+  severityScale:      { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 2 },
+  severityScaleText:  { ...TYPE.micro, color: COLORS.textFaint },
 
-  durationRow:        { flexDirection: 'row', gap: 6, marginBottom: 16 },
+  durationRow:        { flexDirection: 'row', gap: 6, marginTop: 2 },
   durationBtn:        { flex: 1, paddingVertical: 10, borderRadius: RADIUS.sm, backgroundColor: COLORS.parchment, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center' },
   durationBtnActive:  { backgroundColor: COLORS.ink, borderColor: COLORS.ink },
   durationText:       { ...TYPE.bodySmall, color: COLORS.textSub, fontWeight: '500' },
   durationTextActive: { color: '#fff', fontWeight: '600' },
-
-  severityHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 0 },
-  severityRow:    { flexDirection: 'row', gap: 4 },
-  sevBtn:         { flex: 1, paddingVertical: 10, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.border, alignItems: 'center', backgroundColor: COLORS.parchment },
-  sevText:        { fontSize: 11, fontWeight: '600', color: COLORS.textMuted },
-  sevTextActive:  { color: '#fff' },
 
   // Submit dock
   submitDock: {
@@ -852,8 +872,9 @@ const s = StyleSheet.create({
     borderRadius: RADIUS.xl,
   },
   submitBtn:         { backgroundColor: COLORS.ink, borderRadius: RADIUS.xl, paddingVertical: 20, alignItems: 'center' },
-  submitBtnDisabled: { backgroundColor: COLORS.borderMid, opacity: 0.6 },
+  submitBtnDisabled: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: COLORS.border, borderStyle: 'dashed' as any },
   submitText:        { ...TYPE.titleLarge, color: COLORS.textInverse, letterSpacing: 0.2, fontSize: 17 },
+  submitTextInactive:{ color: COLORS.textMuted, fontSize: 15, fontWeight: '500' },
   submitHint:        { ...TYPE.micro, color: COLORS.textFaint, textAlign: 'center', marginTop: 8, letterSpacing: 0.2 },
 
   symptomWarn:       { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(180,90,0,0.08)', borderWidth: 1, borderColor: 'rgba(180,90,0,0.22)', borderRadius: RADIUS.lg, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12 },
@@ -878,6 +899,16 @@ const s = StyleSheet.create({
   modalOptionArrow: { fontSize: 20, color: COLORS.textFaint, fontWeight: '300' },
   modalCancel:      { marginTop: 8, paddingVertical: 14, alignItems: 'center' },
   modalCancelText:  { ...TYPE.bodySmall, color: COLORS.textMuted, fontWeight: '600' },
+
+  // Mode toggle
+  modeToggle:       { flexDirection: 'row', backgroundColor: COLORS.surface, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: COLORS.border, padding: 3, gap: 3 },
+  modeBtn:          { flex: 1, paddingVertical: 9, borderRadius: RADIUS.pill, alignItems: 'center' },
+  modeBtnActive:    { backgroundColor: COLORS.ink },
+  modeBtnInjury:    { backgroundColor: COLORS.crimson },
+  modeBtnText:      { ...TYPE.bodySmall, fontWeight: '600', color: COLORS.textMuted },
+  modeBtnTextActive:{ color: '#fff' },
+  injuryNote:       { backgroundColor: 'rgba(194,59,34,0.07)', borderRadius: RADIUS.md, borderWidth: 1, borderColor: 'rgba(194,59,34,0.2)', paddingVertical: 8, paddingHorizontal: 12, marginTop: -6 },
+  injuryNoteText:   { ...TYPE.micro, color: COLORS.crimson, lineHeight: 17 },
 
   // Cough popup
   coughOverlay:          { flex: 1, backgroundColor: 'rgba(15,17,23,0.6)', justifyContent: 'flex-end' },
