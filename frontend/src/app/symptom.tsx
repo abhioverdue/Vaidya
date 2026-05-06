@@ -218,6 +218,11 @@ export default function SymptomScreen() {
 
   async function startRecording() {
     try {
+      // Force-clean any stale recording from a previous session
+      if (recordingRef.current) {
+        await recordingRef.current.stopAndUnloadAsync().catch(() => {});
+        recordingRef.current = null;
+      }
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
         Alert.alert(t('voice.permission_title'), t('voice.permission_body'));
@@ -229,6 +234,7 @@ export default function SymptomScreen() {
       setIsRecording(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch {
+      recordingRef.current = null;
       Alert.alert(t('errors.microphone'));
     }
   }

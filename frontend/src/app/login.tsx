@@ -40,8 +40,14 @@ export default function LoginScreen() {
 
     try {
       if (!isFirebaseConfigured()) {
-        // Firebase keys missing — fall through to demo login below
-        throw Object.assign(new Error('not configured'), { code: 'auth/network-request-failed' });
+        // Firebase keys not baked in (dev / internal build) — allow demo login
+        await setAuth(
+          { id: 'demo-' + Date.now(), name: name.trim() || email.trim() || 'Guest', phone: '' },
+          'demo-token',
+        );
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        router.replace('/');
+        return;
       }
       const auth = getFirebaseAuth();
       let userCred;
